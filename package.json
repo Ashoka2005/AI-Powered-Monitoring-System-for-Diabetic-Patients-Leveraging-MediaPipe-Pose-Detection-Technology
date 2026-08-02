@@ -1,0 +1,24 @@
+{
+  "name": "diafit-ai",
+  "version": "1.0.0",
+  "description": "AI-powered healthcare platform with diabetes management, fitness tracking, and pose detection",
+  "private": true,
+  "scripts": {
+    "backend": "cd backend && node server.js",
+    "backend:dev": "cd backend && npx nodemon server.js",
+    "frontend": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build",
+    "ml-service": "cd ml-service && python app.py",
+    "mobile": "cd mobile && npx expo start",
+    "seed": "cd backend && node src/utils/seed.js",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install && cd ../ml-service && pip install -r requirements.txt",
+    "install:mobile": "cd mobile && npm install",
+    "docker:up": "docker-compose up -d --build",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "dev": "echo 'Run in separate terminals: npm run backend:dev, npm run frontend, npm run ml-service'"
+  },
+  "keywords": ["healthcare", "diabetes", "fitness", "ai", "pose-detection", "mediapipe"],
+  "author": "DiaFit AI Team",
+  "license": "MIT"
+}
