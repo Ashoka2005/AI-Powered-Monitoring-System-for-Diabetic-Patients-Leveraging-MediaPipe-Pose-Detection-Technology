@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Health Dashboard</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      padding: 20px;
+      min-height: 100vh;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      border-radius: 15px;
+      padding: 30px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 30px;
+      text-align: center;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 20px;
+      margin-bottom: 30px;
+    }
+    .stat-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    .stat-card h3 {
+      font-size: 14px;
+      margin-bottom: 10px;
+      opacity: 0.9;
+    }
+    .stat-card .value {
+      font-size: 32px;
+      font-weight: bold;
+    }
+    .section {
+      margin-top: 30px;
+    }
+    .section h2 {
+      color: #333;
+      margin-bottom: 15px;
+      border-bottom: 2px solid #667eea;
+      padding-bottom: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th, td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #ddd;
+    }
+    th {
+      background: #667eea;
+      color: white;
+      font-weight: 600;
+    }
+    tr:hover {
+      background: #f5f5f5;
+    }
+    .progress-list {
+      display: grid;
+      gap: 15px;
+    }
+    .progress-item {
+      background: #f8f9fa;
+      padding: 15px;
+      border-radius: 8px;
+      border-left: 4px solid #667eea;
+    }
+    .btn {
+      background: #667eea;
+      color: white;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-bottom: 20px;
+    }
+    .btn:hover {
+      background: #5568d3;
+    }
+    #loading {
+      text-align: center;
+      padding: 40px;
+      color: #667eea;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📊 Your Health Dashboard</h1>
+    
+    <button class="btn" onclick="location.href='index.html'">← Back to Monitoring</button>
+    <button class="btn" onclick="loadDashboard()">🔄 Refresh Data</button>
+
+    <div id="loading">Loading your data...</div>
+    
+    <div id="dashboard" style="display:none;">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h3>TOTAL SESSIONS</h3>
+          <div class="value" id="totalSessions">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>TOTAL REPS</h3>
+          <div class="value" id="totalReps">0</div>
+        </div>
+        <div class="stat-card">
+          <h3>AVG ACCURACY</h3>
+          <div class="value" id="avgAccuracy">0%</div>
+        </div>
+        <div class="stat-card">
+          <h3>TOTAL TIME</h3>
+          <div class="value" id="totalTime">0m</div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>Progress by Condition</h2>
+        <div id="progressList" class="progress-list"></div>
+      </div>
+
+      <div class="section">
+        <h2>Recent Sessions</h2>
+        <table id="sessionsTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Exercise</th>
+              <th>Reps</th>
+              <th>Accuracy</th>
+              <th>Glycemic Score</th>
+              <th>Patient Level</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody id="sessionsBody"></tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>BMI History</h2>
+        <table id="bmiTable">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Weight (kg)</th>
+              <th>Height (m)</th>
+              <th>BMI</th>
+              <th>Category</th>
+            </tr>
+          </thead>
+          <tbody id="bmiBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = 'http://localhost:3000/api';
+    let currentUserId = localStorage.getItem('userId');
+
+    async function loadDashboard() {
+      if (!currentUserId) {
+        // Try to load from localStorage even if no userId
+        const lastSessionData = localStorage.getItem('lastSession');
+        if (lastSessionData) {
+          displayLocalData(JSON.parse(lastSessionData));
+          return;
+        }
+        alert('Please complete a session first to view your dashboard.');
+        location.href = 'index.html';
+        return;
+      }
+
+      document.getElementById('loading').style.display = 'block';
+      document.getElementById('dashboard').style.display = 'none';
+
+      try {
+        // Fetch analytics
+        const analyticsRes = await fetch(`${API_URL}/analytics/${currentUserId}`);
+        const analyticsData = await analyticsRes.json();
+
+        if (analyticsData.success) {
+          const { analytics } = analyticsData;
+
+          // Update stats
+          document.getElementById('totalSessions').textContent = analytics.totalSessions;
+          document.getElementById('totalReps').textContent = analytics.totalReps;
+          document.getElementById('avgAccuracy').textContent = analytics.averageAccuracy.toFixed(1) + '%';
+          document.getElementById('totalTime').textContent = Math.floor(analytics.totalDuration / 60) + 'm';
+
+          // Progress by condition
+          const progressList = document.getElementById('progressList');
+          progressList.innerHTML = '';
+          analytics.progressByCondition.forEach(prog => {
+            const div = document.createElement('div');
+            div.className = 'progress-item';
+            div.innerHTML = `
+              <strong>${prog.condition.replace('_', ' ').toUpperCase()}</strong><br>
+              Sessions: ${prog.totalSessions} | Reps: ${prog.totalReps} | Avg Accuracy: ${prog.averageAccuracy.toFixed(1)}%
+            `;
+            progressList.appendChild(div);
+          });
+        }
+
+        // Fetch sessions
+        const sessionsRes = await fetch(`${API_URL}/sessions/${currentUserId}`);
+        const sessionsData = await sessionsRes.json();
+
+        if (sessionsData.success) {
+          const tbody = document.getElementById('sessionsBody');
+          tbody.innerHTML = '';
+          sessionsData.sessions.forEach(session => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${new Date(session.timestamp).toLocaleDateString()}</td>
+              <td>${session.asanaName}</td>
+              <td>${session.reps}</td>
+              <td>${session.accuracy ? session.accuracy.toFixed(1) + '%' : 'N/A'}</td>
+              <td>${session.glycemicScore ? session.glycemicScore.toFixed(1) : 'N/A'}</td>
+              <td>${session.patientLevel || 'N/A'}</td>
+              <td>${session.duration}s</td>
+            `;
+            tbody.appendChild(tr);
+          });
+        }
+
+        // Fetch BMI history
+        const bmiRes = await fetch(`${API_URL}/bmi/${currentUserId}`);
+        const bmiData = await bmiRes.json();
+
+        if (bmiData.success) {
+          const tbody = document.getElementById('bmiBody');
+          tbody.innerHTML = '';
+          
+          if (bmiData.records.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: #999; padding: 30px;">
+              No BMI records found.<br>
+              <small>Calculate your BMI on the main page to see it here.</small>
+            </td></tr>`;
+          } else {
+            bmiData.records.forEach(record => {
+              const tr = document.createElement('tr');
+              tr.innerHTML = `
+                <td>${new Date(record.timestamp).toLocaleDateString()}</td>
+                <td>${record.weight}</td>
+                <td>${record.height}</td>
+                <td>${record.bmi}</td>
+                <td>${record.category}</td>
+              `;
+              tbody.appendChild(tr);
+            });
+          }
+        }
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('dashboard').style.display = 'block';
+
+      } catch (error) {
+        console.error('Error loading dashboard:', error);
+        document.getElementById('loading').innerHTML = `
+          <div style="background: #ffebee; color: #c62828; padding: 20px; border-radius: 10px;">
+            <h3>❌ Unable to load dashboard</h3>
+            <p style="margin-top: 10px;">Please ensure:</p>
+            <ul style="text-align: left; margin-left: 40px; margin-top: 10px;">
+              <li>Server is running on <strong>http://localhost:3000</strong></li>
+              <li>You have completed at least one exercise session</li>
+              <li>MongoDB database is connected</li>
+            </ul>
+            <p style="margin-top: 15px;">Error: ${error.message}</p>
+            <button class="btn" onclick="location.href='index.html'" style="margin-top: 15px;">← Back to App</button>
+          </div>
+        `;
+      }
+    }
+
+    // Display local session data when database is not connected
+    function displayLocalData(sessionData) {
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+      
+      // Update stats from last session
+      document.getElementById('totalSessions').textContent = '1';
+      document.getElementById('totalReps').textContent = sessionData.reps || 0;
+      document.getElementById('avgAccuracy').textContent = (sessionData.accuracy || 0).toFixed(1) + '%';
+      document.getElementById('totalTime').textContent = Math.floor((sessionData.duration || 0) / 60) + 'm';
+      
+      // Show progress
+      const progressList = document.getElementById('progressList');
+      progressList.innerHTML = `
+        <div class="progress-item">
+          <strong>${sessionData.condition?.replace('_', ' ').toUpperCase() || 'EXERCISE'}</strong><br>
+          Last Session: ${sessionData.asanaName}<br>
+          Reps: ${sessionData.reps || 0} | Accuracy: ${(sessionData.accuracy || 0).toFixed(1)}%<br>
+          <small style="color: #ff9800;">⚠️ Data shown from last session only (Database not connected)</small>
+        </div>
+      `;
+      
+      // Show session in table
+      const tbody = document.getElementById('sessionsBody');
+      tbody.innerHTML = `
+        <tr>
+          <td>${new Date().toLocaleDateString()}</td>
+          <td>${sessionData.asanaName}</td>
+          <td>${sessionData.reps || 0}</td>
+          <td>${(sessionData.accuracy || 0).toFixed(1)}%</td>
+          <td>${sessionData.glycemicScore ? sessionData.glycemicScore.toFixed(1) : 'N/A'}</td>
+          <td>${sessionData.patientLevel || 'N/A'}</td>
+          <td>${sessionData.duration || 0}s</td>
+        </tr>
+      `;
+      
+      // Show BMI if available
+      const bmi = localStorage.getItem('lastBMI');
+      if (bmi) {
+        const bmiData = JSON.parse(bmi);
+        const bmiBody = document.getElementById('bmiBody');
+        bmiBody.innerHTML = `
+          <tr>
+            <td>${new Date().toLocaleDateString()}</td>
+            <td>${bmiData.weight}</td>
+            <td>${bmiData.height}</td>
+            <td>${bmiData.bmi}</td>
+            <td>${bmiData.category}</td>
+          </tr>
+        `;
+      }
+      
+      // Show warning
+      const warning = document.createElement('div');
+      warning.style.background = '#fff3cd';
+      warning.style.color = '#856404';
+      warning.style.padding = '15px';
+      warning.style.borderRadius = '8px';
+      warning.style.marginBottom = '20px';
+      warning.style.border = '1px solid #ffeeba';
+      warning.innerHTML = `
+        <strong>⚠️ Showing Last Session Data Only</strong><br>
+        <small>MongoDB database is not connected. To view complete history:<br>
+        1. Whitelist your IP in MongoDB Atlas Network Access<br>
+        2. Ensure cluster is active and connection string is correct</small>
+      `;
+      document.getElementById('dashboard').insertBefore(warning, document.getElementById('dashboard').firstChild);
+    }
+
+    // Load on page load
+    window.addEventListener('load', loadDashboard);
+  </script>
+</body>
+</html>

@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI-Powered Diabetic Monitoring System v1.0 (Final)</title>
+  <link rel="stylesheet" href="style.css" />
+  
+  <!-- MediaPipe Libraries -->
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+  
+  <!-- PDF Generation Library -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>🩺 AI-Powered Diabetic Monitoring System</h1>
+      <p>Leveraging MediaPipe Pose Detection for Glycemic Regulation & Therapy</p>
+      <div class="header-actions">
+        <a href="dashboard.html" class="dashboard-link">📊 View Dashboard & Analytics</a>
+        <a href="database.html" class="dashboard-link">🗄️ View Database</a>
+        <button onclick="openParametersModal()" class="dashboard-link" style="background: rgba(255, 255, 255, 0.4); border-color: white;">ℹ️ System Parameters</button>
+      </div>
+    </div>
+
+    <!-- User Health Data Section (TOP) -->
+    <div class="health-data-section">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h2 style="margin: 0;">👤 User Health Profile</h2>
+        <button onclick="switchUser()" class="btn" style="width: auto; padding: 10px 20px; margin: 0; background: linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%);">
+          🔄 Switch User
+        </button>
+      </div>
+      
+      <div id="currentUserInfo" style="background: #e3f2fd; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; display: none;">
+        <strong>Current User:</strong> <span id="displayUserName">Not logged in</span>
+      </div>
+      
+      <div class="health-data-form">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Language / ಭಾಷೆ</label>
+            <select id="languageSelect" title="Select Language">
+              <option value="en">English</option>
+              <option value="kn">ಕನ್ನಡ (Kannada)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label id="nameLabel">Full Name</label>
+            <input type="text" id="nameInput" placeholder="Enter your name" />
+          </div>
+
+          <div class="form-group">
+            <label>Gender</label>
+            <select id="genderInput" title="Select Gender">
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label id="ageLabel">Age</label>
+            <input type="number" id="ageInput" placeholder="35" min="1" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label id="weightLabel">Weight (kg)</label>
+            <input type="number" id="weightInput" placeholder="65" step="0.1" />
+          </div>
+
+          <div class="form-group">
+            <label id="heightLabel">Height (m)</label>
+            <input type="number" id="heightInput" placeholder="1.70" step="0.01" />
+          </div>
+
+          <div class="form-group">
+            <label>Health Condition</label>
+            <select id="disease" title="Select Health Condition">
+              <option value="">-- Select Condition --</option>
+              <option value="back_pain">Back Pain</option>
+              <option value="knee_pain">Knee Pain</option>
+              <option value="joint_pain">Joint Pain</option>
+              <option value="obesity">Obesity</option>
+              <option value="diabetes_type_1">Diabetes Type 1</option>
+              <option value="diabetes_type_2">Diabetes Type 2</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label id="durationLabel">Exercise Duration</label>
+            <select id="durationSelect" title="Select Exercise Duration">
+              <option value="60">1 Minute</option>
+              <option value="180">3 Minutes</option>
+              <option value="300">5 Minutes</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- New Diabetic Parameters -->
+        <div class="form-row" style="background: rgba(255, 255, 255, 0.5); padding: 10px; border-radius: 8px; border: 1px solid #e0e7ff; margin-bottom: 15px;">
+          <div class="form-group" style="flex: 1;">
+            <label id="sugarLabel">📈 Current Sugar Level (mg/dL)</label>
+            <input type="number" id="sugarLevelInput" placeholder="140" step="1" />
+          </div>
+          <div class="form-group" style="flex: 1; display: flex; align-items: flex-end; gap: 10px;">
+            <button id="dietBtn" class="btn" style="margin: 0; background: linear-gradient(135deg, #10b981 0%, #059669 100%);">
+              🥗 Get Diet Advice
+            </button>
+            <button id="reportBtn" class="btn" style="margin: 0; background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);">
+              📄 Daily Report
+            </button>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <button id="calcBMI" class="btn">Calculate BMI</button>
+          <button id="suggestBtn" class="btn">Get Exercise Recommendations</button>
+        </div>
+
+        <div class="form-row" style="margin-top: 10px;">
+          <button onclick="openSittingPosture()" class="btn" style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            🪑 Sitting Posture Detection
+          </button>
+          <button onclick="openVideoUpload()" class="btn" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+            🎥 Upload Video for Analysis
+          </button>
+        </div>
+
+        <div id="bmiResult" style="margin-top: 15px; display: none;"></div>
+      </div>
+    </div>
+
+    <!-- Main Content Grid (BOTTOM) -->
+    <div class="main-content">
+      <!-- Left Panel - Camera Monitoring -->
+      <div class="monitor-panel">
+        <!-- Camera Controls -->
+        <div class="camera-controls">
+          <button id="startCamera" class="btn">📷 Start Camera</button>
+          <button id="stopCamera" class="btn btn-secondary" style="display:none;">🛑 Stop Camera</button>
+          <button id="voiceToggle" class="btn btn-success" style="display:none;">🔊 Voice ON</button>
+        </div>
+
+        <!-- Target Angles Display -->
+        <div id="targetAngles" class="target-angles" style="display:none;">
+          <h4>🎯 Target Angles for Perfect Posture</h4>
+          <div id="targetGrid" class="target-grid"></div>
+        </div>
+
+        <!-- Video Container -->
+        <div class="video-container">
+          <video id="input" autoplay playsinline style="display:none;"></video>
+          <canvas id="output"></canvas>
+        </div>
+
+        <!-- Live Angle Display -->
+        <div id="liveAngles" class="angle-display" style="display:none;"></div>
+
+        <!-- Feedback Section -->
+        <div class="feedback-section">
+          <div class="feedback-card">
+            <h3>💬 Real-time Guidance</h3>
+            <div id="feedbackText">Select an exercise to begin</div>
+            <div id="accuracyScore"></div>
+          </div>
+
+          <div class="feedback-card">
+            <h3>⏱️ Session Info</h3>
+            <div id="timerDisplay"></div>
+            <div id="repDisplay"></div>
+            <div id="sugarPrediction" style="margin-top: 10px; padding: 10px; background: rgba(99, 102, 241, 0.1); border-radius: 8px; display: none;">
+              <h4 style="margin: 0; color: #4f46e5; font-size: 0.9rem;">🔮 Sugar Level Prediction</h4>
+              <div id="predictionText" style="font-weight: bold; font-size: 1.1rem; margin-top: 5px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel - Exercise Info -->
+      <div class="exercise-panel">
+        <h2>🏋️ Exercise Guide</h2>
+        
+        <div id="asanaList" style="margin-bottom: 20px;"></div>
+
+        <!-- Exercise Preview -->
+        <div class="exercise-preview">
+          <img id="asanaImg" src="" alt="Exercise Demo" style="display:none;" />
+          
+          <div id="benefitsSection" style="display:none;">
+            <h3 id="benefitsTitle">Benefits</h3>
+            <ul id="benefitsList"></ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sitting Posture Detection Modal - Uses SAME MediaPipe Camera -->
+  <div id="sittingPostureModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🪑 Sitting Posture Detection (One Camera System)</h2>
+        <button onclick="closeSittingPosture()" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="posture-instructions">
+          <p><strong>📷 Uses Same MediaPipe Camera System:</strong></p>
+          <ul>
+            <li>One camera for ALL posture detection (exercises + sitting)</li>
+            <li>Sit in front of your camera in a chair</li>
+            <li>Keep your upper body visible (waist up)</li>
+          </ul>
+        </div>
+
+        <!-- AI Guidance for Sitting (Condition Specific) -->
+        <div id="sittingAiGuidance" style="display:none; margin-bottom: 20px; padding: 15px; background: #fff; border-radius: 12px; border: 1px solid #667eea;">
+          <h4 style="color: #667eea; margin-bottom: 10px;">🤖 AI Sitting Guide</h4>
+          <div id="sittingGuidanceContent" style="font-size: 0.9rem; color: #444;"></div>
+          <div style="display: flex; gap: 10px; margin-top: 10px;">
+             <img id="sittingGuidanceImg" src="" style="width: 120px; border-radius: 8px; border: 1px solid #e0e7ff;" />
+             <div style="flex: 1;">
+               <p id="sittingGuidanceTips" style="font-size: 0.85rem; color: #666;"></p>
+             </div>
+          </div>
+        </div>
+
+        <div class="sitting-video-container">
+          <video id="sittingVideo" autoplay playsinline style="display:none;"></video>
+          <canvas id="sittingCanvas"></canvas>
+        </div>
+        <div id="sittingFeedback" class="posture-feedback">
+          <h3>📊 Detailed Posture Analysis</h3>
+          <div id="postureScore">Posture Score: --</div>
+          <div id="postureDetails" style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="detail-item" id="sittingStraight">Sitting: --</div>
+            <div class="detail-item" id="headPosition">Head: --</div>
+            <div class="detail-item" id="eyeStatus">Eyes: --</div>
+            <div class="detail-item" id="backAlignment">Back: --</div>
+            <div class="detail-item" id="shoulderLevel">Shoulders: --</div>
+            <div class="detail-item" id="bodyLeaning">Leaning: --</div>
+          </div>
+          <div id="postureAlerts" style="margin-top: 15px;">Start camera to begin monitoring</div>
+          <div id="activityDescription" style="margin-top: 10px; padding: 10px; background: white; border-radius: 8px; display: none;"></div>
+        </div>
+        <div class="sitting-controls">
+          <button id="startSittingCamera" class="btn">📷 Start Monitoring</button>
+          <button id="stopSittingCamera" class="btn btn-secondary" style="display:none;">🛑 Stop Monitoring</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Upload Modal -->
+  <div id="videoUploadModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>🎥 Video Analysis</h2>
+        <button onclick="closeVideoUpload()" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="upload-section">
+          <p><strong>Select Video Type:</strong></p>
+          <div class="video-type-selector">
+            <button onclick="selectVideoType('exercise')" id="btnExerciseVideo" class="video-type-btn">
+              🏋️ Exercise Movement
+            </button>
+            <button onclick="selectVideoType('sitting')" id="btnSittingVideo" class="video-type-btn">
+              🪑 Sitting Posture
+            </button>
+            <button onclick="selectVideoType('body')" id="btnBodyVideo" class="video-type-btn">
+              🚶 Body Movement
+            </button>
+          </div>
+          <div id="selectedVideoType" style="margin: 15px 0; padding: 10px; background: #f0f4ff; border-radius: 8px; display: none;">
+            <strong>Selected:</strong> <span id="videoTypeText"></span>
+          </div>
+
+          <!-- New Health Condition Selector for Guided Teaching -->
+          <div class="guidance-setup" style="margin-top: 20px; padding: 15px; background: #fff; border-radius: 12px; border: 1px solid #e0e7ff;">
+            <p><strong>🩺 Do you have a health condition?</strong></p>
+            <select id="guidanceCondition" onchange="updateGuidanceContent(this.value)" class="condition-select">
+              <option value="">-- Select Condition for AI Guidance --</option>
+              <option value="back_pain">Back Pain</option>
+              <option value="knee_pain">Knee Pain</option>
+              <option value="joint_pain">Joint Pain</option>
+              <option value="neck_pain">Neck Pain</option>
+            </select>
+          </div>
+
+          <!-- AI Guidance Teaching Section -->
+          <div id="aiGuidanceSection" style="display:none; margin-top: 20px;">
+            <div class="guidance-header">
+              <h3>🤖 AI Teaching Assistant</h3>
+              <p>Follow these guides before you upload your video</p>
+            </div>
+            
+            <div class="guidance-grid">
+              <div class="guidance-card move-guide">
+                <h4>🚶 How to Move</h4>
+                <div id="moveGuideContent"></div>
+                <img id="moveGuideImg" src="" alt="Movement Guide" style="display:none; width: 100%; border-radius: 10px; margin-top: 10px;" />
+              </div>
+              
+              <div class="guidance-card sit-guide">
+                <h4>🪑 How to Sit</h4>
+                <div id="sitGuideContent"></div>
+                <img id="sitGuideImg" src="" alt="Sitting Guide" style="display:none; width: 100%; border-radius: 10px; margin-top: 10px;" />
+              </div>
+            </div>
+          </div>
+          <div class="upload-box">
+            <input type="file" id="videoFileInput" accept="video/*" />
+            <button onclick="uploadVideo()" class="btn">📤 Upload & Analyze</button>
+          </div>
+          <div id="uploadProgress" style="display:none; margin-top: 15px;">
+            <div class="progress-bar">
+              <div id="progressFill" class="progress-fill"></div>
+            </div>
+            <p id="progressText">Uploading...</p>
+          </div>
+        </div>
+        <div id="videoAnalysisResults" style="display:none; margin-top: 20px;">
+          <h3>📊 Analysis Results</h3>
+          <div id="analysisContent"></div>
+        </div>
+        <div class="video-preview">
+          <video id="uploadedVideo" controls style="display:none; max-width: 100%; margin-top: 15px;"></video>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-content">
+      <div class="footer-left">
+        <p>© 2026 AI-Powered Diabetic Monitoring System</p>
+        <p>Advanced Health Monitoring v1.0 Final</p>
+      </div>
+      <div class="footer-right">
+        <p>Built with MediaPipe & TensorFlow.js</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- System Parameters Modal -->
+  <div id="parametersModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width: 800px;">
+      <div class="modal-header">
+        <h2>ℹ️ Major Measurement Parameters</h2>
+        <button onclick="closeParametersModal()" class="close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="parameters-grid">
+          <div class="param-card">
+            <h4>📏 Biometric Metrics</h4>
+            <ul>
+              <li><strong>BMI (Body Mass Index):</strong> Calculated from height and weight. Categorizes metabolic risk levels (Underweight, Normal, Overweight).</li>
+            </ul>
+          </div>
+          <div class="param-card">
+            <h4>📐 Real-time Kinematics</h4>
+            <ul>
+              <li><strong>Joint Angles:</strong> Real-time monitoring of Shoulder, Elbow, Hip, Knee, Ankle, and Spine angles using 33 3D body landmarks.</li>
+              <li><strong>Form Accuracy:</strong> Percentage match between patient's real-time pose and the therapeutic target angle.</li>
+            </ul>
+          </div>
+          <div class="param-card">
+            <h4>🧪 Metabolic Indicators</h4>
+            <ul>
+              <li><strong>Glycemic-Impact Score:</strong> A proprietary metric calculated as <code>(Accuracy × 0.8) + (Reps × 2.0)</code>. Estimates the glucose-regulating effectiveness of the session.</li>
+              <li><strong>Patient Level Monitoring:</strong> 
+                <br>• <strong>Level 1 (Maintenance):</strong> Score > 70
+                <br>• <strong>Level 2 (Targeted):</strong> Score 40-70
+                <br>• <strong>Level 3 (Strict):</strong> Score < 40
+              </li>
+              <li><strong>Repetition Count:</strong> Tracks volume of movement for metabolic expenditure tracking.</li>
+            </ul>
+          </div>
+          <div class="param-card">
+            <h4>🚶 Walk & Body Movement</h4>
+            <ul>
+              <li><strong>Step Symmetry:</strong> Compares left and right knee extension angles to detect uneven gait or limping.</li>
+              <li><strong>Gait Stability:</strong> Monitors spinal sway (Trunk Stability) to ensure balanced walking patterns.</li>
+              <li><strong>Shoulder Alignment:</strong> Detects lateral tilting during movement, a key indicator of gait imbalance.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- JS Files -->
+  <script src="language.js"></script>
+  <script src="knowledge_base.js"></script>
+  <script src="script.js"></script>
+  <script src="posture_features.js"></script>
+  
+  <script>
+    function openParametersModal() {
+      document.getElementById('parametersModal').style.display = 'flex';
+    }
+    function closeParametersModal() {
+      document.getElementById('parametersModal').style.display = 'none';
+    }
+  </script>
+</body>
+</html>
