@@ -138,7 +138,7 @@ router.post(
       });
 
       // Delete verified OTP
-      await Otp.deleteOne({ _id: otpDoc._id });
+      await Otp.deleteOne({ email });
 
       const token = user.generateToken();
       const refreshToken = user.generateRefreshToken();
