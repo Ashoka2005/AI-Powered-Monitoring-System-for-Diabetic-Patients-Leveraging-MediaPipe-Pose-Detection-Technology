@@ -412,6 +412,12 @@ export default function ExerciseRoom() {
     setHasMedicalClearance(false);
   }, [configuringExercise]);
 
+  useEffect(() => {
+    if (isActive && videoRef.current && (!exerciseCounterRef.current || !exerciseCounterRef.current._camera)) {
+      loadMediaPipe();
+    }
+  }, [isActive, videoRef.current]);
+
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
     try {
@@ -541,8 +547,7 @@ export default function ExerciseRoom() {
       }, 1000);
       exerciseCounterRef.current._timer = timer;
 
-      // Load MediaPipe
-      loadMediaPipe();
+      // MediaPipe will be loaded via useEffect once the video element is mounted in the DOM
   };
 
   const handleStartWorkout = async () => {
