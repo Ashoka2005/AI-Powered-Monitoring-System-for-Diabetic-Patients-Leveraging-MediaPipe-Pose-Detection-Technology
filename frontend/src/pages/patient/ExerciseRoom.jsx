@@ -577,11 +577,24 @@ export default function ExerciseRoom() {
 
   const loadMediaPipe = async () => {
     try {
-      const { Pose } = await import('@mediapipe/pose');
-      const { Camera } = await import('@mediapipe/camera_utils');
-      const { drawConnectors, drawLandmarks } = await import('@mediapipe/drawing_utils');
+      let PoseClass, CameraClass, drawConnectorsFunc, drawLandmarksFunc;
 
-      const pose = new Pose({
+      if (window.Pose && window.Camera) {
+        PoseClass = window.Pose;
+        CameraClass = window.Camera;
+        drawConnectorsFunc = window.drawConnectors;
+        drawLandmarksFunc = window.drawLandmarks;
+      } else {
+        const { Pose } = await import('@mediapipe/pose');
+        const { Camera } = await import('@mediapipe/camera_utils');
+        const { drawConnectors, drawLandmarks } = await import('@mediapipe/drawing_utils');
+        PoseClass = Pose;
+        CameraClass = Camera;
+        drawConnectorsFunc = drawConnectors;
+        drawLandmarksFunc = drawLandmarks;
+      }
+
+      const pose = new PoseClass({
         locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
       });
 
@@ -609,8 +622,8 @@ export default function ExerciseRoom() {
           setAbsenceWarningSeconds(null);
 
           // Draw skeleton
-          drawConnectors(ctx, results.poseLandmarks, [[11,13],[13,15],[12,14],[14,16],[11,12],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28],[27,29],[28,30],[29,31],[30,32]], { color: '#3b82f6', lineWidth: 3 });
-          drawLandmarks(ctx, results.poseLandmarks, { color: '#ef4444', lineWidth: 1, radius: 4 });
+          drawConnectorsFunc(ctx, results.poseLandmarks, [[11,13],[13,15],[12,14],[14,16],[11,12],[11,23],[12,24],[23,24],[23,25],[24,26],[25,27],[26,28],[27,29],[28,30],[29,31],[30,32]], { color: '#3b82f6', lineWidth: 3 });
+          drawLandmarksFunc(ctx, results.poseLandmarks, { color: '#ef4444', lineWidth: 1, radius: 4 });
 
           // Process exercise
           const counter = exerciseCounterRef.current;
@@ -662,7 +675,7 @@ export default function ExerciseRoom() {
 
       poseRef.current = pose;
 
-      const camera = new Camera(videoRef.current, {
+      const camera = new CameraClass(videoRef.current, {
         onFrame: async () => { await pose.send({ image: videoRef.current }); },
         width: 640,
         height: 480,
