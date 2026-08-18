@@ -682,8 +682,7 @@ export default function ExerciseRoom() {
 
       const camera = new CameraClass(videoRef.current, {
         onFrame: async () => { await pose.send({ image: videoRef.current }); },
-        width: 640,
-        height: 480,
+        facingMode: 'user'
       });
       camera.start();
       exerciseCounterRef.current._camera = camera;
