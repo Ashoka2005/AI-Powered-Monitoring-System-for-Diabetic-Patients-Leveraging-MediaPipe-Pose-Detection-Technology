@@ -95,59 +95,123 @@ router.post('/', protect, async (req, res) => {
           }
 
           const emailHtml = `
-            <div style="font-family: monospace; white-space: pre-wrap; font-size: 14px; color: #1a202c; line-height: 1.6; max-width: 600px; padding: 25px; border: 2px solid #de350b; background-color: #fdf2f2; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-Dear ${recipient.name},
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 15px; color: #2c3e50; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #e0e0e0; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); background-color: #ffffff; overflow: hidden;">
+              <!-- Urgent Red Header Banner -->
+              <div style="background-color: #d32f2f; color: #ffffff; padding: 25px 20px; text-align: center;">
+                <h1 style="margin: 0; font-size: 24px; font-weight: bold; letter-spacing: 0.5px;">🚨 CRITICAL EMERGENCY ALERT</h1>
+                <p style="margin: 5px 0 0 0; font-size: 14px; opacity: 0.9;">DiaFit AI Patient Monitoring System</p>
+              </div>
 
-This is an automated emergency alert from DiaFit AI. You are receiving this message as the patient's ${recipient.role}.
+              <!-- Main Body Content -->
+              <div style="padding: 25px;">
+                <p style="margin-top: 0; font-size: 16px; font-weight: bold;">Dear ${recipient.name},</p>
+                <p style="font-size: 15px; color: #333333; margin-bottom: 20px;">
+                  This is an automated emergency alert from <strong>DiaFit AI</strong>. You are receiving this message because you are registered as the patient's <strong>${recipient.role}</strong>.
+                </p>
 
-${incidentDescription}
+                <!-- Incident Warning Box -->
+                <div style="background-color: #ffebee; border-left: 5px solid #d32f2f; padding: 15px; border-radius: 4px; margin-bottom: 25px;">
+                  <p style="margin: 0 0 5px 0; color: #c62828; font-weight: bold; font-size: 15px;">Incident Report:</p>
+                  <p style="margin: 0; color: #5d4037; font-size: 14px; line-height: 1.5;">${incidentDescription}</p>
+                </div>
 
-Please check on the patient immediately and ensure that they are safe.
+                <!-- Patient Details Card -->
+                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+                  <h3 style="margin-top: 0; margin-bottom: 12px; color: #495057; font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid #dee2e6; padding-bottom: 6px;">📋 Patient & Workout Details</h3>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <tr>
+                      <td style="padding: 6px 0; color: #6c757d; width: 40%;"><strong>Patient Name:</strong></td>
+                      <td style="padding: 6px 0; color: #212529;"><strong>${user.firstName} ${user.lastName}</strong></td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #6c757d;"><strong>Age / Gender:</strong></td>
+                      <td style="padding: 6px 0; color: #212529;">${age} / ${user.profile?.gender || 'N/A'}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #6c757d;"><strong>Exercise:</strong></td>
+                      <td style="padding: 6px 0; color: #212529;">${exerciseName}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #6c757d;"><strong>Session Started:</strong></td>
+                      <td style="padding: 6px 0; color: #212529;">${startTime}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 6px 0; color: #6c757d;"><strong>Alert Dispatched:</strong></td>
+                      <td style="padding: 6px 0; color: #d32f2f; font-weight: bold;">${alertTime}</td>
+                    </tr>
+                  </table>
+                </div>
 
-━━━━━━━━━━━━━━━━━━━━
-PATIENT DETAILS
-━━━━━━━━━━━━━━━━━━━━
+                <!-- Location Card & Map Link -->
+                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+                  <h3 style="margin-top: 0; margin-bottom: 12px; color: #495057; font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid #dee2e6; padding-bottom: 6px;">📍 Last Known Location</h3>
+                  <p style="margin: 0 0 15px 0; font-size: 14px; color: #212529;"><strong>Address/Coordinates:</strong> ${addressString}</p>
+                  ${location?.latitude && location?.longitude ? `
+                  <div style="text-align: center; margin: 15px 0 5px 0;">
+                    <a href="https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}" target="_blank" style="display: inline-block; background-color: #d32f2f; color: #ffffff; text-decoration: none; padding: 12px 24px; font-weight: bold; border-radius: 6px; box-shadow: 0 2px 5px rgba(211,47,47,0.3); font-size: 14px;">
+                      Open Location in Google Maps 📍
+                    </a>
+                  </div>
+                  ` : ''}
+                </div>
 
-Patient Name: ${user.firstName} ${user.lastName}
-Patient ID: ${user._id}
-Age: ${age}
-Gender: ${user.profile?.gender || 'N/A'}
-Exercise: ${exerciseName}
-Session Start Time: ${startTime}
-Alert Time: ${alertTime}
-Last Known Location: ${addressString}
-${mapsLink}
+                <!-- Emergency Contacts Card -->
+                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 18px; margin-bottom: 20px;">
+                  <h3 style="margin-top: 0; margin-bottom: 12px; color: #495057; font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid #dee2e6; padding-bottom: 6px;">📞 Registered Emergency Contacts</h3>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                    <tr>
+                      <td style="padding: 5px 0; color: #6c757d; width: 40%;"><strong>Primary Contact:</strong></td>
+                      <td style="padding: 5px 0; color: #212529;">${contact?.name || 'Emergency Contact'} (${contact?.relationship || 'Guardian'})</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 5px 0; color: #6c757d;"><strong>Phone Number:</strong></td>
+                      <td style="padding: 5px 0; color: #212529;"><a href="tel:${contact?.phone || ''}" style="color: #0747a6; text-decoration: none; font-weight: bold;">${contact?.phone || 'N/A'}</a></td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 5px 0; color: #6c757d;"><strong>Secondary Guardian:</strong></td>
+                      <td style="padding: 5px 0; color: #212529;">${user.profile?.guardian?.name || 'Not Configured'}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 5px 0; color: #6c757d;"><strong>Secondary Phone:</strong></td>
+                      <td style="padding: 5px 0; color: #212529;">${user.profile?.guardian?.phone ? `<a href="tel:${user.profile.guardian.phone}" style="color: #0747a6; text-decoration: none;">${user.profile.guardian.phone}</a>` : 'Not Configured'}</td>
+                    </tr>
+                  </table>
+                </div>
 
-━━━━━━━━━━━━━━━━━━━━
-GUARDIAN / EMERGENCY CONTACT
-━━━━━━━━━━━━━━━━━━━━
+                <!-- System Diagnostics Card -->
+                <div style="background-color: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 18px; margin-bottom: 25px;">
+                  <h3 style="margin-top: 0; margin-bottom: 12px; color: #495057; font-size: 13px; text-transform: uppercase; letter-spacing: 0.8px; border-bottom: 1px solid #dee2e6; padding-bottom: 6px;">⚙️ System Diagnostics</h3>
+                  <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                    <tr>
+                      <td style="padding: 4px 0; color: #6c757d; width: 40%;"><strong>Alert Type:</strong></td>
+                      <td style="padding: 4px 0; color: #212529;">${alertType}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 4px 0; color: #6c757d;"><strong>Detection Status:</strong></td>
+                      <td style="padding: 4px 0; color: #212529;">${detectionStatus}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 4px 0; color: #6c757d;"><strong>Duration Offline:</strong></td>
+                      <td style="padding: 4px 0; color: #212529;">${duration}</td>
+                    </tr>
+                    <tr>
+                      <td style="padding: 4px 0; color: #6c757d;"><strong>Current Status:</strong></td>
+                      <td style="padding: 4px 0; color: #d32f2f; font-weight: bold;">Immediate Response Recommended</td>
+                    </tr>
+                  </table>
+                </div>
 
-Guardian Name: ${contact?.name || 'Emergency Contact'}
-Relationship: ${contact?.relationship || 'Guardian'}
-Phone Number: ${contact?.phone || 'N/A'}
-Email: ${contact?.email || 'N/A'}
+                <p style="font-size: 15px; font-weight: bold; color: #d32f2f; margin-top: 25px; text-align: center; border-top: 1px solid #f1f3f5; padding-top: 20px;">
+                  ⚠️ Action Required: Please verify the safety of the patient immediately!
+                </p>
 
-Secondary Guardian Name: ${user.profile?.guardian?.name || 'Not Configured'}
-Secondary Guardian Phone: ${user.profile?.guardian?.phone || 'Not Configured'}
-
-━━━━━━━━━━━━━━━━━━━━
-ALERT INFORMATION
-━━━━━━━━━━━━━━━━━━━━
-
-Alert Type: ${alertType}
-Detection Status: ${detectionStatus}
-Detection Duration: ${duration}
-Current Status: Immediate Attention Recommended
-
-Please contact the patient or visit them as soon as possible to verify their safety.
-
-This alert was automatically generated by the DiaFit AI Patient Monitoring System.
-
-Regards,
-DiaFit AI
-AI-Powered Diabetes Care & Monitoring System
-
-⚠️ This is an automated safety alert. Please do not reply to this email.
+                <hr style="border: 0; border-top: 1px solid #e9ecef; margin: 25px 0 15px 0;"/>
+                
+                <p style="font-size: 12px; color: #868e96; text-align: center; margin: 0; line-height: 1.5;">
+                  This alert was automatically generated by the DiaFit AI Patient Monitoring System.<br/>
+                  ⚠️ This is a security notification. Please do not reply to this email.
+                </p>
+              </div>
             </div>
           `;
           
