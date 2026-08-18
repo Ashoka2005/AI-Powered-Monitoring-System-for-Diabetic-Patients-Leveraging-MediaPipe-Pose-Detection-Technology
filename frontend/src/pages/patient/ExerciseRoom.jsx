@@ -499,18 +499,12 @@ export default function ExerciseRoom() {
     } catch { toast.error('Failed to start session'); return; }
 
     // Start camera
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-      setIsActive(true);
-      speak(`Starting ${exercise.name}. Follow the instructions and keep good form!`);
+    setIsActive(true);
+    speak(`Starting ${exercise.name}. Follow the instructions and keep good form!`);
 
-      // Timer
-      const startTime = Date.now();
-      const timer = setInterval(() => {
+    // Timer
+    const startTime = Date.now();
+    const timer = setInterval(() => {
         const secondsPassed = Math.floor((Date.now() - startTime) / 1000);
         setElapsed(secondsPassed);
 
@@ -549,9 +543,6 @@ export default function ExerciseRoom() {
 
       // Load MediaPipe
       loadMediaPipe();
-    } catch (err) {
-      toast.error('Camera access denied. Please allow camera permissions.');
-    }
   };
 
   const handleStartWorkout = async () => {
