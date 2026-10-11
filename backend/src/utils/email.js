@@ -30,23 +30,28 @@ const sendEmail = async ({ to, subject, html, attachments }) => {
   const smtpUser = (process.env.SMTP_USER || 'a09022762@gmail.com').trim();
   if (smtpUser && cleanPass) {
     try {
-      const port = parseInt(process.env.SMTP_PORT) || 587;
-      const is465 = port === 465;
-      const transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST || 'smtp.gmail.com',
-        port: port,
-        secure: is465,
-        auth: {
-          user: smtpUser,
-          pass: cleanPass,
-        },
-        connectionTimeout: 8000,
-        greetingTimeout: 8000,
-        socketTimeout: 10000,
-        tls: { rejectUnauthorized: false },
-      });
+      const isGmail = smtpUser.includes('gmail.com') || (process.env.SMTP_HOST && process.env.SMTP_HOST.includes('gmail'));
+      const transporter = isGmail
+        ? nodemailer.createTransport({
+            service: 'gmail',
+            auth: {
+              user: smtpUser,
+              pass: cleanPass,
+            },
+          })
+        : nodemailer.createTransport({
+            host: process.env.SMTP_HOST || 'smtp.gmail.com',
+            port: parseInt(process.env.SMTP_PORT) || 465,
+            secure: (parseInt(process.env.SMTP_PORT) || 465) === 465,
+            auth: {
+              user: smtpUser,
+              pass: cleanPass,
+            },
+            connectionTimeout: 8000,
+            tls: { rejectUnauthorized: false },
+          });
 
-      console.log(`[Email Service] Dispatching email to ${to} via Primary SMTP (${process.env.SMTP_HOST || 'smtp.gmail.com'})...`);
+      console.log(`[Email Service] Dispatching email to ${to} via ${isGmail ? 'Gmail Service' : 'Primary SMTP'}...`);
       const info = await transporter.sendMail({
         from: `"DiaFit AI Healthcare" <${process.env.EMAIL_FROM || smtpUser}>`,
         to,
@@ -54,7 +59,7 @@ const sendEmail = async ({ to, subject, html, attachments }) => {
         html,
         attachments,
       });
-      console.log('✓ [Email Service] Real email delivered successfully via Primary SMTP! MessageId:', info.messageId);
+      console.log('✓ [Email Service] Real email delivered successfully! MessageId:', info.messageId);
       return true;
     } catch (error) {
       console.warn('⚠️ [Email Service] Primary SMTP delivery failed:', error.message);

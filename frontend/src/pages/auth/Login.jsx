@@ -35,7 +35,6 @@ export default function Login() {
   const [otpStep, setOtpStep] = useState('request'); // 'request' | 'verify'
   const [otpCode, setOtpCode] = useState('');
   const [otpCountdown, setOtpCountdown] = useState(0);
-  const [fallbackNotice, setFallbackNotice] = useState(null);
 
   // Register Form States
   const [regForm, setRegForm] = useState({
@@ -101,17 +100,11 @@ export default function Login() {
 
     setLoading(true);
     try {
-      const res = await requestLoginOtp(cleanEmail, '');
+      await requestLoginOtp(cleanEmail, '');
       setOtpStep('verify');
       setOtpCode('');
       setOtpCountdown(60);
-      if (res.fallbackCodeNotice) {
-        setFallbackNotice(res.fallbackCodeNotice);
-        toast.success(res.fallbackCodeNotice, { duration: 8000 });
-      } else {
-        setFallbackNotice(null);
-        toast.success(`6-Digit Verification OTP sent to ${cleanEmail}!`, { duration: 6000 });
-      }
+      toast.success(`Verification code sent to ${cleanEmail}! Please check your email inbox.`, { duration: 6000 });
     } catch {
       // Toast handled in AuthContext
     } finally {
@@ -466,14 +459,8 @@ export default function Login() {
                     </div>
 
                     <p className="text-slate-500 text-xs mb-6">
-                      Enter the 6-digit OTP code sent to: <strong className="text-indigo-700">{signInIdentifier}</strong>
+                      Enter the 6-digit OTP code sent to: <strong className="text-indigo-700">{signInIdentifier}</strong>. Please check your email inbox or spam folder.
                     </p>
-
-                    {fallbackNotice && (
-                      <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-xs">
-                        {fallbackNotice}
-                      </div>
-                    )}
 
                     <form onSubmit={handleVerifySignInOtp} className="space-y-4">
                       <div>

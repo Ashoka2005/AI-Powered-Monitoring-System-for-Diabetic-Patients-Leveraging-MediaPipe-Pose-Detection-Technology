@@ -38,8 +38,8 @@ router.post(
       console.log(`🔑 [OTP Code]: ${otpCode}`);
       console.log(`======================================================\n`);
 
-      // Send Email asynchronously in the background
-      sendEmail({
+      // Send Email with 6-digit verification OTP
+      await sendEmail({
         to: normalizedEmail,
         subject: 'DiaFit AI - Email Verification Code',
         html: `
@@ -54,18 +54,11 @@ router.post(
             <p style="color: #6b7280; font-size: 12px;">This code is valid for 10 minutes. If you did not request this code, please ignore this email.</p>
           </div>
         `,
-      }).catch(err => console.error('[REGISTER OTP] Delivery warning:', err.message));
-
-      const hasRealSmtp = Boolean(
-        process.env.SMTP_USER &&
-        (process.env.SMTP_PASS || process.env.EMAIL_APP_PASSWORD)
-      );
+      });
 
       res.json({
         success: true,
-        message: 'Verification code sent to your email address. Please check your inbox.',
-        emailDelivered: hasRealSmtp,
-        ...(hasRealSmtp ? {} : { fallbackCodeNotice: `Server Notice: Code is ${otpCode}` })
+        message: `A 6-digit verification code has been sent to ${normalizedEmail}. Please check your email inbox.`
       });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -218,8 +211,8 @@ router.post(
       console.log(`🔑 [LOGIN OTP Code]: ${otpCode}`);
       console.log(`======================================================\n`);
 
-      // Dispatch Email asynchronously in background
-      sendEmail({
+      // Dispatch Email with 6-digit verification code
+      await sendEmail({
         to: normalizedEmail,
         subject: 'DiaFit AI - Your Verification Code',
         html: `
@@ -239,20 +232,13 @@ router.post(
             <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">&copy; DiaFit AI Healthcare. All rights reserved.</p>
           </div>
         `,
-      }).catch(err => console.error('[LOGIN OTP] Delivery warning:', err.message));
-
-      const hasRealSmtp = Boolean(
-        process.env.SMTP_USER &&
-        (process.env.SMTP_PASS || process.env.EMAIL_APP_PASSWORD)
-      );
+      });
 
       res.json({
         success: true,
         requireOtp: true,
         isNewUser: !user,
-        message: `A 6-digit verification code has been sent to ${normalizedEmail}. Please check your email inbox.`,
-        emailDelivered: hasRealSmtp,
-        ...(hasRealSmtp ? {} : { fallbackCodeNotice: `Server Notice: Code is ${otpCode}` })
+        message: `A 6-digit verification code has been sent to ${normalizedEmail}. Please check your email inbox.`
       });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -413,17 +399,10 @@ router.post(
           `,
         });
 
-        const hasRealSmtp = Boolean(
-          process.env.SMTP_USER &&
-          (process.env.SMTP_PASS || process.env.EMAIL_APP_PASSWORD)
-        );
-
         return res.json({
           success: true,
           requireOtp: true,
-          message: `Verification code sent to ${normalizedEmail}. Please check your inbox.`,
-          emailDelivered: hasRealSmtp,
-          ...(hasRealSmtp ? {} : { fallbackCodeNotice: `Server Notice: Code is ${otpCode}` })
+          message: `Verification code sent to ${normalizedEmail}. Please check your inbox.`
         });
       }
 
