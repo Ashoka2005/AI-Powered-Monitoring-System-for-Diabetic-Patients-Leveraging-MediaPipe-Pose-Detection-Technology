@@ -379,6 +379,7 @@ router.post(
       }
 
       // If client requests OTP verification before logging in
+      const normalizedEmail = (user.email || identifier).toLowerCase().trim();
       if (sendOtp) {
         const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
         await Otp.findOneAndUpdate(

@@ -26,8 +26,8 @@ const getEtherealTransporter = async () => {
 
 const sendEmail = async ({ to, subject, html, attachments }) => {
   // 1. Direct Primary SMTP (Gmail or custom SMTP - Priority #1)
-  const cleanPass = (process.env.SMTP_PASS || process.env.EMAIL_APP_PASSWORD || '').trim().replace(/\s+/g, '');
-  const smtpUser = (process.env.SMTP_USER || '').trim();
+  const cleanPass = (process.env.SMTP_PASS || process.env.EMAIL_APP_PASSWORD || 'xfhxtlxplujwuajz').trim().replace(/\s+/g, '');
+  const smtpUser = (process.env.SMTP_USER || 'a09022762@gmail.com').trim();
   if (smtpUser && cleanPass) {
     try {
       const port = parseInt(process.env.SMTP_PORT) || 587;
