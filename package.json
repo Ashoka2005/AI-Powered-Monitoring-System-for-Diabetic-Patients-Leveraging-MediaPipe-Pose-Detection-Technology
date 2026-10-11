@@ -16,7 +16,8 @@
     "docker:up": "docker-compose up -d --build",
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f",
-    "dev": "echo 'Run in separate terminals: npm run backend:dev, npm run frontend, npm run ml-service'"
+    "start": "start.bat",
+    "dev": "start.bat"
   },
   "keywords": ["healthcare", "diabetes", "fitness", "ai", "pose-detection", "mediapipe"],
   "author": "DiaFit AI Team",

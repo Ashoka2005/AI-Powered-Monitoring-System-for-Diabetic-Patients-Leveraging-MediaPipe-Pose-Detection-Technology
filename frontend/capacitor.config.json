@@ -1,0 +1,12 @@
+{
+  "appId": "com.diafit.ai",
+  "appName": "DiaFit AI",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true
+  }
+}

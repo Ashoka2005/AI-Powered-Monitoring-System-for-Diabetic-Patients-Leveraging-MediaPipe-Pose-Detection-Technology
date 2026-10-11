@@ -4,6 +4,7 @@ import api from '../../utils/api';
 import { ExerciseCounter, detectFall, getPostureFeedback } from '../../utils/exerciseLogic';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
+import { RobustCamera } from '../../utils/cameraUtils';
 
 const renderExerciseGuideSVG = (slug) => {
   const transition = {
@@ -290,7 +291,8 @@ export default function ExerciseRoom() {
   const [timeLimit, setTimeLimit] = useState(300); // default 5 minutes
   const [preExerciseSugar, setPreExerciseSugar] = useState('');
   
-  // Camera absence tracking
+  // Camera absence tracking & error handling
+  const [cameraError, setCameraError] = useState(null);
   const [absenceWarningSeconds, setAbsenceWarningSeconds] = useState(null);
   const lastVisibleTimeRef = useRef(Date.now());
   const isEmergencyDispatchedRef = useRef(false);
@@ -298,6 +300,7 @@ export default function ExerciseRoom() {
   const [liveAngle, setLiveAngle] = useState(0);
   const [hasMedicalClearance, setHasMedicalClearance] = useState(false);
   const [emailSending, setEmailSending] = useState(false);
+  const [dispatchedAlertNotice, setDispatchedAlertNotice] = useState(null);
 
   const isLocked = (exId) => {
     if (!recommendations) return false;
@@ -521,15 +524,15 @@ export default function ExerciseRoom() {
         const timeSinceLastSeen = Date.now() - lastVisibleTimeRef.current;
         const secondsAbsent = Math.floor(timeSinceLastSeen / 1000);
 
-        if (secondsAbsent > 15) {
+        if (secondsAbsent >= 10) {
           if (!isEmergencyDispatchedRef.current) {
             isEmergencyDispatchedRef.current = true;
             triggerEmergencyAlert('user_absent');
           }
-        } else if (secondsAbsent > 5) {
-          const countdown = 15 - secondsAbsent;
+        } else if (secondsAbsent >= 5) {
+          const countdown = 10 - secondsAbsent;
           setAbsenceWarningSeconds(countdown);
-          if (secondsAbsent % 3 === 0) {
+          if (secondsAbsent % 2 === 1) {
             speakEmergency(`Warning. User not visible. Emergency alert in ${countdown} seconds.`);
           }
         } else {
@@ -582,19 +585,20 @@ export default function ExerciseRoom() {
 
   const loadMediaPipe = async () => {
     try {
-      let PoseClass, CameraClass, drawConnectorsFunc, drawLandmarksFunc;
+      setCameraError(null);
+      if (exerciseCounterRef.current?._camera) {
+        try { exerciseCounterRef.current._camera.stop(); } catch (e) {}
+      }
+      let PoseClass, drawConnectorsFunc, drawLandmarksFunc;
 
-      if (window.Pose && window.Camera) {
+      if (window.Pose) {
         PoseClass = window.Pose;
-        CameraClass = window.Camera;
         drawConnectorsFunc = window.drawConnectors;
         drawLandmarksFunc = window.drawLandmarks;
       } else {
         const { Pose } = await import('@mediapipe/pose');
-        const { Camera } = await import('@mediapipe/camera_utils');
         const { drawConnectors, drawLandmarks } = await import('@mediapipe/drawing_utils');
         PoseClass = Pose;
-        CameraClass = Camera;
         drawConnectorsFunc = drawConnectors;
         drawLandmarksFunc = drawLandmarks;
       }
@@ -658,12 +662,12 @@ export default function ExerciseRoom() {
                 setCorrectionsCount(prev => prev + combinedFeedback.length);
               }
 
-              // Voice coaching on rep completion
+              // Voice coaching on rep completion and posture correction
               if (result.reps > 0 && result.reps !== counter._lastReps) {
                 speak(`Rep ${result.reps}! ${result.accuracy > 80 ? 'Great form!' : 'Focus on your form.'}`);
                 counter._lastReps = result.reps;
-              } else if (postureFeedback.length > 0) {
-                if (postureFeedback[0]) speak(postureFeedback[0]);
+              } else if (combinedFeedback.length > 0) {
+                if (combinedFeedback[0]) speak(combinedFeedback[0]);
               }
             }
 
@@ -680,15 +684,31 @@ export default function ExerciseRoom() {
 
       poseRef.current = pose;
 
-      const camera = new CameraClass(videoRef.current, {
+      // Use RobustCamera with automatic mobile front-facing fallback
+      const camera = new RobustCamera(videoRef.current, {
         onFrame: async () => { await pose.send({ image: videoRef.current }); },
-        facingMode: 'user'
+        facingMode: 'user',
+        width: 640,
+        height: 480
       });
-      camera.start();
+      await camera.start();
       exerciseCounterRef.current._camera = camera;
     } catch (err) {
-      console.error('MediaPipe load error:', err);
-      toast.error('Pose detection failed to load. Exercise tracking disabled.');
+      console.error('MediaPipe/Camera initialization error:', err);
+      const isSecure = window.isSecureContext || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+      if (!isSecure) {
+        setCameraError('insecure_context');
+        toast.error('Camera requires HTTPS or localhost: Browsers block camera over unencrypted HTTP on LAN.', { duration: 9000 });
+      } else if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
+        setCameraError('permission_denied');
+        toast.error('Camera permission was denied. Please allow camera access in your browser settings.', { duration: 6000 });
+      } else if (err.name === 'NotFoundError' || err.name === 'DevicesNotFoundError') {
+        setCameraError('not_found');
+        toast.error('No camera detected on this device. Please connect a webcam or enable camera.', { duration: 6000 });
+      } else {
+        setCameraError(err.message || 'camera_failed');
+        toast.error(`Camera error: ${err.message || 'Failed to open camera'}`, { duration: 6000 });
+      }
     }
   };
 
@@ -724,8 +744,6 @@ export default function ExerciseRoom() {
       speakEmergency("Emergency alert triggered. Potential fall detected. Notifying emergency contacts.");
     }
 
-    toast.error("Emergency Alert Dispatched!", { duration: 5000 });
-
     try {
       const locationData = latitude && longitude ? {
         latitude,
@@ -735,7 +753,7 @@ export default function ExerciseRoom() {
         address: "Location access denied or unavailable"
       };
 
-      await api.post('/alerts', {
+      const alertRes = await api.post('/alerts', {
         type: reason === 'user_absent' ? 'user_absent' : 'fall_detected',
         severity: 'critical',
         title,
@@ -747,8 +765,23 @@ export default function ExerciseRoom() {
           duration: elapsed ? `${elapsed} seconds` : '10 seconds'
         }
       });
+
+      const sentOtp = alertRes.data?.emergencyOtp || alertRes.data?.data?.data?.emergencyOtp;
+      const sentEmail = alertRes.data?.emergencyEmail || 'Emergency Contact';
+      if (sentOtp) {
+        toast.error(`🚨 Emergency Alert with OTP (${sentOtp}) dispatched to ${sentEmail}!`, { duration: 10000 });
+      } else {
+        toast.error(`🚨 Emergency Alert dispatched to ${sentEmail}!`, { duration: 7000 });
+      }
+
+      setDispatchedAlertNotice({
+        otp: sentOtp || 'DISPATCHED',
+        email: sentEmail,
+        exerciseName: selectedExercise?.name || 'Workout'
+      });
     } catch (err) {
       console.error("Failed to post emergency alert:", err);
+      toast.error("Failed to notify emergency server", { duration: 4000 });
     }
 
     stopExercise(false);
@@ -1167,6 +1200,42 @@ export default function ExerciseRoom() {
                   <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
                   <canvas ref={canvasRef} className="pose-overlay" />
                   
+                  {/* Top Floating Real-Time Feedback HUD */}
+                  <div className="absolute top-4 left-4 right-4 flex justify-between items-center z-20 pointer-events-none">
+                    {/* Live Rep Counter */}
+                    <div className="bg-black/70 backdrop-blur-md border border-white/20 px-3.5 py-1.5 rounded-2xl flex items-center gap-2 shadow-xl">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-gray-300">Reps</span>
+                      <span className="text-xl font-black text-primary-400 font-mono">{reps}</span>
+                    </div>
+
+                    {/* Dynamic Real-Time Posture Feedback Banner */}
+                    {feedback.length > 0 ? (
+                      <div className="bg-amber-500/95 text-white font-black text-xs md:text-sm px-4 py-2 rounded-2xl shadow-xl border border-amber-300 backdrop-blur-md animate-pulse flex items-center gap-2">
+                        <span className="text-base">⚠️</span>
+                        <span>{feedback[0]}</span>
+                      </div>
+                    ) : accuracy >= 75 ? (
+                      <div className="bg-emerald-500/95 text-white font-black text-xs md:text-sm px-4 py-2 rounded-2xl shadow-xl border border-emerald-300 backdrop-blur-md flex items-center gap-2">
+                        <span className="text-base">✓</span>
+                        <span>Great Posture! Keep Going</span>
+                      </div>
+                    ) : (
+                      <div className="bg-black/60 text-gray-300 font-semibold text-xs px-3.5 py-1.5 rounded-2xl backdrop-blur-md border border-white/15">
+                        Tracking Form...
+                      </div>
+                    )}
+
+                    {/* Live Accuracy Metric */}
+                    <div className="bg-black/70 backdrop-blur-md border border-white/20 px-3.5 py-1.5 rounded-2xl flex items-center gap-2 shadow-xl">
+                      <span className="text-[10px] font-black uppercase tracking-wider text-gray-300">Accuracy</span>
+                      <span className={`text-sm font-black ${
+                        accuracy >= 80 ? 'text-emerald-400' : accuracy >= 60 ? 'text-amber-400' : 'text-red-400'
+                      }`}>
+                        {accuracy}%
+                      </span>
+                    </div>
+                  </div>
+                  
                   {/* Fall Warning */}
                   {fallDetected && (
                     <div className="absolute inset-0 bg-red-500/60 flex items-center justify-center backdrop-blur-sm z-30">
@@ -1193,6 +1262,89 @@ export default function ExerciseRoom() {
                       </div>
                     </div>
                   )}
+
+                  {/* Camera Error / Insecure Context Fallback Screen */}
+                  {cameraError && (
+                    <div className="absolute inset-0 bg-gray-950/95 flex items-center justify-center p-4 md:p-6 z-35 backdrop-blur-md overflow-y-auto">
+                      <div className="bg-gray-900 border border-amber-500/40 rounded-3xl p-5 md:p-6 text-white max-w-md w-full shadow-2xl text-center space-y-4">
+                        <div className="w-12 h-12 md:w-14 md:h-14 bg-amber-500/20 text-amber-400 rounded-2xl flex items-center justify-center text-2xl md:text-3xl mx-auto border border-amber-500/30">
+                          📷
+                        </div>
+                        
+                        <div>
+                          <h3 className="text-base md:text-lg font-bold text-white">
+                            {cameraError === 'insecure_context'
+                              ? 'Camera Requires HTTPS on Mobile'
+                              : cameraError === 'permission_denied'
+                              ? 'Camera Permission Denied'
+                              : 'Camera Initialization Failed'}
+                          </h3>
+                          <p className="text-xs text-gray-300 mt-1 leading-relaxed">
+                            {cameraError === 'insecure_context'
+                              ? 'Mobile browsers (Chrome/Safari) block camera access over plain HTTP on Wi-Fi for privacy. Choose one of the fixes below:'
+                              : cameraError === 'permission_denied'
+                              ? 'Please tap the lock icon in your browser address bar and set Camera to "Allow", then retry.'
+                              : cameraError}
+                          </p>
+                        </div>
+
+                        {cameraError === 'insecure_context' && (
+                          <div className="space-y-3 text-left">
+                            <div className="bg-emerald-950/60 border border-emerald-500/40 rounded-2xl p-3.5">
+                              <p className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                                <span>📱</span> For Mobile Phone (Android Chrome)
+                              </p>
+                              <p className="text-[11px] text-gray-300 mt-1 mb-2">
+                                Chrome blocks cameras on Wi-Fi IP addresses by default. Enable it in 10 seconds:
+                              </p>
+                              <ol className="text-[11px] text-gray-300 space-y-1.5 list-decimal list-inside leading-snug">
+                                <li>
+                                  In Chrome URL bar, open:{' '}
+                                  <span className="text-amber-300 font-mono bg-black/40 px-1 py-0.5 rounded text-[10px] break-all select-all">
+                                    chrome://flags/#unsafely-treat-insecure-origin-as-secure
+                                  </span>
+                                </li>
+                                <li>
+                                  Set dropdown to <strong>Enabled</strong>
+                                </li>
+                                <li>
+                                  In the text box below it, enter:{' '}
+                                  <span className="text-emerald-300 font-mono bg-black/40 px-1 py-0.5 rounded text-[10px] break-all select-all">
+                                    {window.location.origin}
+                                  </span>
+                                </li>
+                                <li>
+                                  Tap the blue <strong>Relaunch</strong> button at bottom
+                                </li>
+                              </ol>
+                            </div>
+
+                            <div className="bg-gray-800/80 border border-gray-700 rounded-2xl p-3">
+                              <p className="text-xs font-bold text-gray-200 flex items-center gap-1.5">
+                                <span>💻</span> For Laptop / PC
+                              </p>
+                              <p className="text-[11px] text-gray-400 mt-1">
+                                Simply open <code className="text-amber-300 bg-black/40 px-1 py-0.5 rounded font-mono">http://localhost:5173</code> — camera works immediately without any settings.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 pt-1">
+                          <button
+                            onClick={() => {
+                              setCameraError(null);
+                              loadMediaPipe();
+                            }}
+                            className="flex-1 bg-gradient-to-r from-teal-500 to-emerald-600 hover:opacity-95 text-white font-bold text-xs py-2.5 px-4 rounded-xl transition shadow-lg"
+                          >
+                            🔄 Retry Camera
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
 
                   {/* Floating Live Angle & Live Status Badge */}
                   <div className="absolute bottom-4 left-4 right-4 flex justify-between items-center bg-black/60 text-white px-4 py-3 rounded-2xl backdrop-blur-md border border-white/10 text-xs font-semibold z-20">
@@ -1913,6 +2065,47 @@ export default function ExerciseRoom() {
                 </button>
               </div>
             </motion.div>
+          </div>
+        )}
+
+        {/* Emergency Alert Dispatched Notice Modal */}
+        {dispatchedAlertNotice && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-4 z-50 animate-fade-in">
+            <div className="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-full shadow-2xl border-2 border-red-500 text-center relative overflow-hidden">
+              <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center text-3xl mx-auto mb-4 animate-bounce">
+                🚨
+              </div>
+              <h3 className="text-2xl font-black text-slate-900 mb-1">Emergency Alert Dispatched</h3>
+              <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+                Patient was not detected in camera frame during {dispatchedAlertNotice.exerciseName}. An emergency alert was automatically sent to your emergency contact.
+              </p>
+
+              <div className="bg-gradient-to-br from-red-50 to-orange-50 border-2 border-dashed border-red-300 rounded-2xl p-4 mb-5 text-center">
+                <p className="text-[10px] font-bold uppercase tracking-widest text-red-700 mb-1">
+                  Incident Verification OTP
+                </p>
+                <p className="font-mono text-3xl font-black text-red-600 tracking-[0.25em]">
+                  {dispatchedAlertNotice.otp}
+                </p>
+                <p className="text-[11px] text-red-800/80 mt-1">
+                  Sent to: <strong>{dispatchedAlertNotice.email}</strong>
+                </p>
+              </div>
+
+              <div className="bg-slate-50 rounded-xl p-3 text-xs text-slate-600 text-left space-y-1 mb-6 border border-slate-100">
+                <p>📍 <strong>GPS Coordinates:</strong> Attached in email dispatch</p>
+                <p>🕒 <strong>Dispatched At:</strong> {new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+                <p>🛡️ <strong>Safety Protocol:</strong> Emergency services / caregiver notified</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setDispatchedAlertNotice(null)}
+                className="w-full py-3.5 bg-red-600 hover:bg-red-700 active:bg-red-800 text-white font-bold text-sm rounded-xl shadow-lg shadow-red-600/30 transition cursor-pointer"
+              >
+                I Am Safe & Present (Dismiss Alert)
+              </button>
+            </div>
           </div>
         )}
       </div>

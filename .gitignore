@@ -4,3 +4,5 @@ build/
 .cache/
 .env
 .env.local
+mobile_apk_build/
+*.idsig

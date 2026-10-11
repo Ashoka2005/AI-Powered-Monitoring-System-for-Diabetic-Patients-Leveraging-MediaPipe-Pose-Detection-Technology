@@ -3,48 +3,38 @@ const { protect } = require('../middleware/auth');
 const Alert = require('../models/Alert');
 const router = express.Router();
 
-// Create alert (e.g., fall detection)
+// Create alert (e.g., fall detection, user absence)
 router.post('/', protect, async (req, res) => {
   try {
     const { type, severity, title, message, data, location } = req.body;
-    const alert = await Alert.create({
-      userId: req.user._id,
-      type,
-      severity: severity || 'medium',
-      title,
-      message,
-      data,
-      location,
-    });
+    const User = require('../models/User');
+    const user = await User.findById(req.user._id);
+    const contact = user?.profile?.emergencyContact;
+
+    let emergencyOtp = null;
+    let emergencyEmail = null;
+    const recipients = [];
 
     // Auto-notify emergency contacts strictly
     if (type === 'fall_detected' || type === 'user_absent' || severity === 'critical') {
-      const User = require('../models/User');
-      const user = await User.findById(req.user._id);
-      const contact = user.profile?.emergencyContact;
-      console.log('[DEBUG ALERT ROUTE] User profile emergencyContact:', contact);
-      console.log('[DEBUG ALERT ROUTE] Entire user profile:', user.profile);
-      
-      const recipients = [];
+      // Generate 6-digit emergency verification OTP
+      emergencyOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
-      // 1. Primary Emergency Contact (if configured)
-      if (contact && contact.email) {
+      // 1. Primary Personal Emergency Contact (Strictly and exclusively)
+      emergencyEmail = (contact?.email || user?.profile?.guardian?.email || user?.email || '').trim();
+      const emergencyName = contact?.name || user?.profile?.guardian?.name || (contact?.email ? 'Emergency Contact' : `${user?.firstName || 'Patient'} (Self)`);
+      const emergencyPhone = contact?.phone || user?.profile?.guardian?.phone || user?.phone || '';
+
+      if (emergencyEmail) {
         recipients.push({
-          email: contact.email,
-          name: contact.name || 'Emergency Contact',
-          role: 'Primary Emergency Contact'
-        });
-        alert.notifiedContacts.push({
-          name: contact.name || 'Emergency Contact',
-          phone: contact.phone || '',
-          email: contact.email || '',
-          notifiedAt: new Date(),
-          method: 'email',
+          email: emergencyEmail,
+          name: emergencyName,
+          role: contact?.email ? 'Personal Emergency Contact' : 'Registered Patient Email (Emergency Contact Fallback)'
         });
       }
 
-      // 2. Assigned Doctor Physician (if configured)
-      if (user.patientInfo?.doctorId) {
+      // 2. Assigned Doctor Physician - Only if NOT a user absence alert (User absent alerts go to personal emergency contact only)
+      if (type !== 'user_absent' && user?.patientInfo?.doctorId) {
         const doctor = await User.findById(user.patientInfo.doctorId);
         if (doctor && doctor.email) {
           recipients.push({
@@ -52,27 +42,39 @@ router.post('/', protect, async (req, res) => {
             name: `Dr. ${doctor.firstName} ${doctor.lastName}`,
             role: 'Assigned Healthcare Practitioner'
           });
-          alert.notifiedContacts.push({
-            name: `Dr. ${doctor.firstName} ${doctor.lastName}`,
-            phone: doctor.phone || '',
-            email: doctor.email,
-            notifiedAt: new Date(),
-            method: 'email',
-          });
         }
       }
+    }
 
-      await alert.save();
+    const notifiedContacts = recipients.map(r => ({
+      name: r.name,
+      phone: contact?.phone || user?.phone || '',
+      email: r.email,
+      notifiedAt: new Date(),
+      method: 'email',
+    }));
 
-      // Dispatch alert emails to all resolved recipients
+    const alert = await Alert.create({
+      userId: req.user._id,
+      type,
+      severity: severity || 'medium',
+      title,
+      message,
+      data: { ...(data || {}), ...(emergencyOtp ? { emergencyOtp } : {}) },
+      location,
+      notifiedContacts,
+    });
+
+    if (recipients.length > 0) {
+      console.log(`[ALERT DISPATCH] Alert type: ${type} with OTP ${emergencyOtp} to ${recipients.length} recipients`);
+      
       for (const recipient of recipients) {
         try {
           const { sendEmail } = require('../utils/email');
           const addressString = location?.address || (location?.latitude && location?.longitude ? `GPS: Lat ${typeof location.latitude === 'number' ? location.latitude.toFixed(6) : location.latitude}, Lon ${typeof location.longitude === 'number' ? location.longitude.toFixed(6) : location.longitude}` : 'Unknown location');
-          const mapsLink = location?.latitude && location?.longitude ? `<br/><a href="https://www.google.com/maps/search/?api=1&query=${location.latitude},${location.longitude}" target="_blank" style="color: #0747a6; text-decoration: underline; font-weight: bold;">Open in Google Maps 📍</a>` : '';
           
           let age = 'N/A';
-          if (user.profile?.dateOfBirth) {
+          if (user?.profile?.dateOfBirth) {
             const diff = Date.now() - new Date(user.profile.dateOfBirth).getTime();
             age = Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
           }
@@ -110,9 +112,16 @@ router.post('/', protect, async (req, res) => {
                 </p>
 
                 <!-- Incident Warning Box -->
-                <div style="background-color: #ffebee; border-left: 5px solid #d32f2f; padding: 15px; border-radius: 4px; margin-bottom: 25px;">
+                <div style="background-color: #ffebee; border-left: 5px solid #d32f2f; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
                   <p style="margin: 0 0 5px 0; color: #c62828; font-weight: bold; font-size: 15px;">Incident Report:</p>
                   <p style="margin: 0; color: #5d4037; font-size: 14px; line-height: 1.5;">${incidentDescription}</p>
+                </div>
+
+                <!-- Emergency Incident OTP Box -->
+                <div style="background: linear-gradient(135deg, #fef2f2, #fee2e2); border: 2px dashed #dc2626; border-radius: 12px; padding: 18px; text-align: center; margin-bottom: 25px;">
+                  <p style="margin: 0 0 6px 0; font-size: 13px; font-weight: bold; color: #991b1b; text-transform: uppercase; letter-spacing: 1px;">🚨 Emergency Incident Verification OTP</p>
+                  <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #dc2626;">${emergencyOtp}</span>
+                  <p style="margin: 6px 0 0 0; font-size: 12px; color: #7f1d1d;">Share or use this code to confirm patient status with emergency response services.</p>
                 </div>
 
                 <!-- Patient Details Card -->
@@ -121,11 +130,11 @@ router.post('/', protect, async (req, res) => {
                   <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
                     <tr>
                       <td style="padding: 6px 0; color: #6c757d; width: 40%;"><strong>Patient Name:</strong></td>
-                      <td style="padding: 6px 0; color: #212529;"><strong>${user.firstName} ${user.lastName}</strong></td>
+                      <td style="padding: 6px 0; color: #212529;"><strong>${user?.firstName || 'Patient'} ${user?.lastName || ''}</strong></td>
                     </tr>
                     <tr>
                       <td style="padding: 6px 0; color: #6c757d;"><strong>Age / Gender:</strong></td>
-                      <td style="padding: 6px 0; color: #212529;">${age} / ${user.profile?.gender || 'N/A'}</td>
+                      <td style="padding: 6px 0; color: #212529;">${age} / ${user?.profile?.gender || 'N/A'}</td>
                     </tr>
                     <tr>
                       <td style="padding: 6px 0; color: #6c757d;"><strong>Exercise:</strong></td>
@@ -168,12 +177,8 @@ router.post('/', protect, async (req, res) => {
                       <td style="padding: 5px 0; color: #212529;"><a href="tel:${contact?.phone || ''}" style="color: #0747a6; text-decoration: none; font-weight: bold;">${contact?.phone || 'N/A'}</a></td>
                     </tr>
                     <tr>
-                      <td style="padding: 5px 0; color: #6c757d;"><strong>Secondary Guardian:</strong></td>
-                      <td style="padding: 5px 0; color: #212529;">${user.profile?.guardian?.name || 'Not Configured'}</td>
-                    </tr>
-                    <tr>
-                      <td style="padding: 5px 0; color: #6c757d;"><strong>Secondary Phone:</strong></td>
-                      <td style="padding: 5px 0; color: #212529;">${user.profile?.guardian?.phone ? `<a href="tel:${user.profile.guardian.phone}" style="color: #0747a6; text-decoration: none;">${user.profile.guardian.phone}</a>` : 'Not Configured'}</td>
+                      <td style="padding: 5px 0; color: #6c757d;"><strong>Emergency Email:</strong></td>
+                      <td style="padding: 5px 0; color: #212529;">${emergencyEmail}</td>
                     </tr>
                   </table>
                 </div>
@@ -218,11 +223,11 @@ router.post('/', protect, async (req, res) => {
           console.log(`[Emergency Alert] Dispatching alert email to ${recipient.email} (Role: ${recipient.role})`);
           await sendEmail({
             to: recipient.email,
-            subject: `🚨 CRITICAL EMERGENCY ALERT: ${user.firstName} ${user.lastName} (${incidentSubject})`,
+            subject: `🚨 CRITICAL EMERGENCY ALERT: ${user?.firstName || 'Patient'} ${user?.lastName || ''} (${incidentSubject})`,
             html: emailHtml
           });
         } catch (emailErr) {
-          console.error(`Failed to send emergency contact email to ${recipient.email}:`, emailErr);
+          console.error(`Failed to send emergency contact email to ${recipient.email}:`, emailErr.message);
         }
       }
     }
@@ -232,15 +237,19 @@ router.post('/', protect, async (req, res) => {
     if (io) {
       io.to(`user_${req.user._id}`).emit('alert', alert);
       // Notify doctor if assigned
-      const User = require('../models/User');
-      const user = await User.findById(req.user._id);
-      if (user.patientInfo?.doctorId) {
+      if (user?.patientInfo?.doctorId) {
         io.to(`user_${user.patientInfo.doctorId}`).emit('patient_alert', alert);
       }
     }
 
-    res.status(201).json({ success: true, data: alert });
+    res.status(201).json({
+      success: true,
+      data: alert,
+      emergencyOtp,
+      emergencyEmail
+    });
   } catch (error) {
+    console.error('[ALERT ROUTE ERROR]:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });

@@ -1,6 +1,46 @@
 import axios from 'axios';
 
-const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+export const DEFAULT_HOST_IP = '10.189.225.89';
+
+export const getServerIp = () => {
+  return localStorage.getItem('diafit_server_ip') || DEFAULT_HOST_IP;
+};
+
+export const setServerIp = (ip) => {
+  if (ip && ip.trim()) {
+    localStorage.setItem('diafit_server_ip', ip.trim());
+  } else {
+    localStorage.removeItem('diafit_server_ip');
+  }
+  window.location.reload();
+};
+
+export const getServerBase = () => {
+  if (typeof window === 'undefined') return '/api/v1';
+  
+  const customIp = localStorage.getItem('diafit_server_ip');
+  if (customIp && customIp.trim()) return `http://${customIp.trim()}:5000/api/v1`;
+
+  // Native Android APK / Capacitor / File URL environment:
+  const isNativeApp = window.Capacitor !== undefined || 
+    window.location.protocol === 'file:' ||
+    (window.location.hostname === 'localhost' && window.location.protocol === 'https:' && !window.location.port);
+    
+  if (isNativeApp) {
+    return `http://${DEFAULT_HOST_IP}:5000/api/v1`;
+  }
+
+  // Mobile or LAN browser directly accessing computer IP
+  if (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return `${window.location.protocol}//${window.location.hostname}:5000/api/v1`;
+  }
+
+  // Desktop localhost browser (vite dev proxy forwards /api to localhost:5000)
+  return import.meta.env.VITE_API_URL || '/api/v1';
+};
+
+const API_BASE = getServerBase();
+console.log("DiaFit AI API Base URL:", API_BASE);
 console.log("DiaFit AI API Base URL:", API_BASE);
 
 const api = axios.create({

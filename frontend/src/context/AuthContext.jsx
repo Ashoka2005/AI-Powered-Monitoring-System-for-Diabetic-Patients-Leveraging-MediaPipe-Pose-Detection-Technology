@@ -46,6 +46,37 @@ export function AuthProvider({ children }) {
     }
   };
 
+  const requestLoginOtp = async (email, password = '') => {
+    try {
+      const payload = { email: email.trim().toLowerCase() };
+      if (password) payload.password = password;
+      const res = await api.post('/auth/login-send-otp', payload);
+      return res.data;
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Failed to send verification code');
+      throw error;
+    }
+  };
+
+  const verifyLoginOtp = async (email, code) => {
+    try {
+      const res = await api.post('/auth/login-verify-otp', {
+        email: email.trim().toLowerCase(),
+        code: code.trim(),
+      });
+      const { token: newToken, refreshToken } = res.data.data;
+      localStorage.setItem('token', newToken);
+      localStorage.setItem('refreshToken', refreshToken);
+      setToken(newToken);
+      setUser(res.data.data.user);
+      toast.success('Welcome back!');
+      return res.data.data;
+    } catch (error) {
+      toast.error(error.response?.data?.message || 'Invalid or expired verification code');
+      throw error;
+    }
+  };
+
   const register = async (data) => {
     try {
       const res = await api.post('/auth/register', data);
@@ -81,7 +112,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, logout, updateProfile, fetchUser }}>
+    <AuthContext.Provider value={{ user, token, loading, login, requestLoginOtp, verifyLoginOtp, register, logout, updateProfile, fetchUser }}>
       {children}
     </AuthContext.Provider>
   );

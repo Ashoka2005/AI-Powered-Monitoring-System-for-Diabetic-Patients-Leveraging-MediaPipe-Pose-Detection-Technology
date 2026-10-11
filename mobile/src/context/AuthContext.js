@@ -27,12 +27,41 @@ export function AuthProvider({ children }) {
   };
 
   const login = async (email, password) => {
-    const { data } = await api.post('/auth/login', { email, password });
+    const { data } = await api.post('/auth/login', { email: email.trim().toLowerCase(), password });
+    if (data.data?.token) {
+      await AsyncStorage.setItem('token', data.data.token);
+      await AsyncStorage.setItem('refreshToken', data.data.refreshToken);
+      await AsyncStorage.setItem('user', JSON.stringify(data.data.user));
+      setUser(data.data.user);
+    }
+    return data;
+  };
+
+  const requestLoginOtp = async (email, password) => {
+    const { data } = await api.post('/auth/login-send-otp', {
+      email: (email || '').trim().toLowerCase(),
+      password,
+    });
+    return data;
+  };
+
+  const verifyLoginOtp = async (email, code) => {
+    const { data } = await api.post('/auth/login-verify-otp', {
+      email: (email || '').trim().toLowerCase(),
+      code: (code || '').trim(),
+    });
     await AsyncStorage.setItem('token', data.data.token);
     await AsyncStorage.setItem('refreshToken', data.data.refreshToken);
     await AsyncStorage.setItem('user', JSON.stringify(data.data.user));
     setUser(data.data.user);
     return data.data.user;
+  };
+
+  const sendRegisterOtp = async (email) => {
+    const { data } = await api.post('/auth/send-otp', {
+      email: (email || '').trim().toLowerCase(),
+    });
+    return data;
   };
 
   const register = async (formData) => {
@@ -53,7 +82,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, requestLoginOtp, verifyLoginOtp, sendRegisterOtp, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -2,7 +2,7 @@ const express = require('express');
 const { protect } = require('../middleware/auth');
 const ChatMessage = require('../models/ChatMessage');
 const axios = require('axios');
-const { v4: uuidv4 } = require('crypto');
+const crypto = require('crypto');
 const router = express.Router();
 
 // Send message to chatbot

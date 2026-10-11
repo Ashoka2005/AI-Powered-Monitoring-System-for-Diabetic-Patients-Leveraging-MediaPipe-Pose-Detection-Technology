@@ -157,13 +157,23 @@ export default function Profile() {
                 </div>
               </div>
 
-              <div className="card">
-                <h2 className="text-lg font-semibold mb-4">Emergency Contact</h2>
+              <div className="card border-2 border-red-100 bg-gradient-to-br from-white to-red-50/20">
+                <div className="flex items-center justify-between mb-2">
+                  <h2 className="text-lg font-bold text-red-950 flex items-center gap-2">
+                    🚨 Emergency Contact (Safety Alert Recipient)
+                  </h2>
+                  <span className="text-[11px] font-bold px-2.5 py-1 bg-red-100 text-red-700 rounded-full">
+                    Required for Camera Safety
+                  </span>
+                </div>
+                <p className="text-xs text-red-800/80 mb-4 leading-relaxed">
+                  <strong>Important:</strong> If you step away, fall, or remain absent from the camera for more than 10 seconds during an exercise, the AI safety system will automatically dispatch an emergency alert with a <strong>verification OTP</strong> and live GPS location link to this email address.
+                </p>
                 <div className="grid sm:grid-cols-4 gap-4">
-                  <div><label className="block text-sm font-medium mb-1">Name</label><input value={form.profile.emergencyContact?.name || ''} onChange={e => setForm({ ...form, profile: { ...form.profile, emergencyContact: { ...form.profile.emergencyContact, name: e.target.value } } })} className="input-field" /></div>
-                  <div><label className="block text-sm font-medium mb-1">Phone</label><input value={form.profile.emergencyContact?.phone || ''} onChange={e => setForm({ ...form, profile: { ...form.profile, emergencyContact: { ...form.profile.emergencyContact, phone: e.target.value } } })} className="input-field" /></div>
-                  <div><label className="block text-sm font-medium mb-1">Email</label><input type="email" value={form.profile.emergencyContact?.email || ''} onChange={e => setForm({ ...form, profile: { ...form.profile, emergencyContact: { ...form.profile.emergencyContact, email: e.target.value } } })} className="input-field" /></div>
-                  <div><label className="block text-sm font-medium mb-1">Relationship</label><input value={form.profile.emergencyContact?.relationship || ''} onChange={e => setForm({ ...form, profile: { ...form.profile, emergencyContact: { ...form.profile.emergencyContact, relationship: e.target.value } } })} className="input-field" /></div>
+                  <div><label className="block text-xs font-bold text-slate-700 uppercase mb-1">Contact Name *</label><input value={form.profile.emergencyContact?.name || ''} onChange={e => setForm({ ...form, profile: { ...form.profile, emergencyContact: { ...form.profile.emergencyContact, name: e.target.value } } })} className="input-field" placeholder="e.g. Sarah Smith" /></div>
+                  <div><label className="block text-xs font-bold text-slate-700 uppercase mb-1">Contact Phone</label><input value={form.profile.emergencyContact?.phone || ''} onChange={e => setForm({ ...form, profile: { ...form.profile, emergencyContact: { ...form.profile.emergencyContact, phone: e.target.value } } })} className="input-field" placeholder="e.g. +91 9876543210" /></div>
+                  <div><label className="block text-xs font-bold text-red-700 uppercase mb-1">Emergency Email *</label><input type="email" value={form.profile.emergencyContact?.email || ''} onChange={e => setForm({ ...form, profile: { ...form.profile, emergencyContact: { ...form.profile.emergencyContact, email: e.target.value } } })} className="input-field border-red-300 focus:ring-red-500" placeholder="emergency@example.com" required /></div>
+                  <div><label className="block text-xs font-bold text-slate-700 uppercase mb-1">Relationship</label><input value={form.profile.emergencyContact?.relationship || ''} onChange={e => setForm({ ...form, profile: { ...form.profile, emergencyContact: { ...form.profile.emergencyContact, relationship: e.target.value } } })} className="input-field" placeholder="e.g. Daughter, Spouse, Doctor" /></div>
                 </div>
               </div>
 

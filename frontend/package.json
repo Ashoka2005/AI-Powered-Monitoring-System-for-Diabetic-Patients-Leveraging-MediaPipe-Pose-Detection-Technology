@@ -6,12 +6,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:https": "vite --https",
     "build": "vite build",
     "preview": "vite preview",
     "electron:start": "electron .",
     "electron:build": "npm run build && electron-builder"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.1",
+    "@capacitor/cli": "^8.5.1",
+    "@capacitor/core": "^8.5.1",
     "@mediapipe/camera_utils": "^0.3.1675466862",
     "@mediapipe/drawing_utils": "^0.3.1675466124",
     "@mediapipe/pose": "^0.5.1675469404",
@@ -27,6 +31,7 @@
     "socket.io-client": "^4.7.5"
   },
   "devDependencies": {
+    "@vitejs/plugin-basic-ssl": "^1.2.0",
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
     "electron": "^43.2.0",

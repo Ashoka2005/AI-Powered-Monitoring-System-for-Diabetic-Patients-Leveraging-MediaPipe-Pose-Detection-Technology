@@ -10,3 +10,13 @@ ReactDOM.createRoot(document.getElementById('root')).render(
     <Toaster position="top-right" toastOptions={{ duration: 3000, style: { background: '#363636', color: '#fff' } }} />
   </React.StrictMode>
 );
+
+// Register Service Worker for mobile PWA app installation
+if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.log('SW registration skipped:', err);
+    });
+  });
+}
+

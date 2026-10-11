@@ -157,64 +157,78 @@ export class ExerciseCounter {
       case 'leg_raise': {
         const leftHip = calculateAngle(lm[11], lm[23], lm[25]); // left shoulder-hip-knee
         const rightHip = calculateAngle(lm[12], lm[24], lm[26]); // right shoulder-hip-knee
-        return { primaryAngle: (leftHip + rightHip) / 2, feedback: [] };
+        const avgHip = (leftHip + rightHip) / 2;
+        const feedback = [];
+        if (avgHip > 100) feedback.push('Raise legs smoothly to 90°');
+        if (avgHip < 40) feedback.push('Lower legs slowly, keep control');
+        return { primaryAngle: avgHip, feedback };
       }
       case 'wall-pushup':
       case 'wall_pushup': {
         const leftAngle = calculateAngle(lm[11], lm[13], lm[15]); // left shoulder-elbow-wrist
         const rightAngle = calculateAngle(lm[12], lm[14], lm[16]); // right shoulder-elbow-wrist
-        return { primaryAngle: (leftAngle + rightAngle) / 2, feedback: [] };
+        const avgAngle = (leftAngle + rightAngle) / 2;
+        const feedback = [];
+        if (avgAngle > 140) feedback.push('Bend elbows to lower toward wall');
+        if (avgAngle < 60) feedback.push('Push back firmly to arms straight');
+        return { primaryAngle: avgAngle, feedback };
       }
       case 'seated-march':
       case 'seated_march': {
-        // Seated march: track hip angle left & right
         const leftHip = calculateAngle(lm[11], lm[23], lm[25]);
         const rightHip = calculateAngle(lm[12], lm[24], lm[26]);
-        // Lifted knee decreases hip angle from 90 (seated) to ~55-60.
         const primaryAngle = Math.min(leftHip, rightHip);
         const feedback = [];
-        if (primaryAngle < 45) feedback.push('Do not lift knees past hip height');
+        if (primaryAngle > 80) feedback.push('Lift knee higher toward chest');
+        if (primaryAngle < 40) feedback.push('Do not lift knee past hip level');
         return { primaryAngle, feedback };
       }
       case 'seated-twist':
       case 'seated_twist': {
-        // Seated twist: shoulders twist relative to hip base
-        const leftAngle = calculateAngle(lm[12], lm[11], lm[23]); // right_shoulder - left_shoulder - left_hip
-        const rightAngle = calculateAngle(lm[11], lm[12], lm[24]); // left_shoulder - right_shoulder - right_hip
+        const leftAngle = calculateAngle(lm[12], lm[11], lm[23]);
+        const rightAngle = calculateAngle(lm[11], lm[12], lm[24]);
         const primaryAngle = (leftAngle + rightAngle) / 2;
         const feedback = [];
+        if (primaryAngle < 60) feedback.push('Twist gently further from your core');
         return { primaryAngle, feedback };
       }
       case 'walking-place':
       case 'walking_place': {
-        // Walking in place: marching knee lift
         const leftHip = calculateAngle(lm[11], lm[23], lm[25]);
         const rightHip = calculateAngle(lm[12], lm[24], lm[26]);
-        // Standing is 170. Knee lift decreases hip angle to ~100-110.
         const primaryAngle = Math.min(leftHip, rightHip);
         const feedback = [];
+        if (primaryAngle > 130) feedback.push('Lift knees higher as you march');
         return { primaryAngle, feedback };
       }
       case 'arm-circle':
       case 'arm_circle': {
         const leftShoulder = calculateAngle(lm[23], lm[11], lm[13]);
         const rightShoulder = calculateAngle(lm[24], lm[12], lm[14]);
-        return { primaryAngle: (leftShoulder + rightShoulder) / 2, feedback: [] };
+        const avgShoulder = (leftShoulder + rightShoulder) / 2;
+        const feedback = [];
+        if (avgShoulder < 70) feedback.push('Raise arms up to shoulder level');
+        return { primaryAngle: avgShoulder, feedback };
       }
       case 'standing-knee-bend':
       case 'standing_knee_bend': {
         const leftKnee = calculateAngle(lm[23], lm[25], lm[27]);
         const rightKnee = calculateAngle(lm[24], lm[26], lm[28]);
-        return { primaryAngle: Math.min(leftKnee, rightKnee), feedback: [] };
+        const primaryAngle = Math.min(leftKnee, rightKnee);
+        const feedback = [];
+        if (primaryAngle > 110) feedback.push('Curl heel higher toward glutes');
+        return { primaryAngle, feedback };
       }
       case 'ankle-pump':
       case 'ankle_pump': {
         const leftAnkle = calculateAngle(lm[25], lm[27], lm[31]);
         const rightAnkle = calculateAngle(lm[26], lm[28], lm[32]);
-        return { primaryAngle: (leftAnkle + rightAnkle) / 2, feedback: [] };
+        const avgAnkle = (leftAnkle + rightAnkle) / 2;
+        const feedback = [];
+        if (avgAnkle < 20) feedback.push('Flex toes upward toward shin');
+        return { primaryAngle: avgAnkle, feedback };
       }
       default: {
-        // Generic: use elbow angle
         const leftAngle = calculateAngle(lm[11], lm[13], lm[15]);
         const rightAngle = calculateAngle(lm[12], lm[14], lm[16]);
         return { primaryAngle: (leftAngle + rightAngle) / 2, feedback: [] };

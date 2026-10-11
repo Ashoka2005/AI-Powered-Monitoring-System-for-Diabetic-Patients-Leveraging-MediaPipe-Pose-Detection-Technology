@@ -30,9 +30,19 @@ const doctorRoutes = require('./src/routes/doctor');
 const app = express();
 const server = http.createServer(app);
 
+// Dynamic CORS handler for development & production
+const getCorsOrigin = (origin, callback) => {
+  if (!origin) return callback(null, true);
+  const isDev = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+  if (isDev) return callback(null, true);
+  const allowed = process.env.FRONTEND_URL || 'http://localhost:5173';
+  if (origin === allowed) return callback(null, true);
+  return callback(new Error('Not allowed by CORS'));
+};
+
 // Socket.io setup
 const io = new Server(server, {
-  cors: { origin: process.env.FRONTEND_URL || 'http://localhost:5173', methods: ['GET', 'POST'] },
+  cors: { origin: getCorsOrigin, methods: ['GET', 'POST'] },
 });
 app.set('io', io);
 
@@ -354,12 +364,77 @@ connectDB().then(async () => {
       console.log('Exercises seeded!');
     } catch (e) { console.error('Seed error:', e.message); }
   }
+
+  const User = require('./src/models/User');
+  const userCount = await User.countDocuments();
+  if (userCount === 0) {
+    try {
+      await User.create({
+        firstName: 'Demo',
+        lastName: 'Patient',
+        email: 'demo@diafit.com',
+        password: 'password123',
+        role: 'patient',
+        profile: {
+          gender: 'male',
+          height: 175,
+          weight: 70,
+          profession: 'Engineer',
+          emergencyContact: {
+            name: 'Emergency Contact',
+            phone: '+1234567890',
+            email: 'emergency@diafit.com',
+            relationship: 'Family'
+          }
+        },
+        patientInfo: {
+          diabetesType: 'type2'
+        }
+      });
+      console.log('Demo user seeded: demo@diafit.com / password123');
+    } catch (err) {
+      console.error('Demo user seed error:', err.message);
+    }
+  }
+
+  // Ensure configured email account exists so user can log in directly
+  const primaryEmail = (process.env.SMTP_USER || 'a09022762@gmail.com').toLowerCase().trim();
+  const primaryExists = await User.findOne({ email: primaryEmail });
+  if (!primaryExists) {
+    try {
+      await User.create({
+        firstName: 'Ashoka',
+        lastName: 'User',
+        email: primaryEmail,
+        password: 'password123',
+        role: 'patient',
+        profile: {
+          gender: 'male',
+          height: 175,
+          weight: 70,
+          profession: 'Member',
+          emergencyContact: {
+            name: 'Emergency',
+            phone: '+1234567890',
+            email: primaryEmail,
+            relationship: 'Family'
+          }
+        },
+        patientInfo: {
+          diabetesType: 'type2'
+        }
+      });
+      console.log(`Primary user seeded: ${primaryEmail} / password123`);
+    } catch (err) {
+      console.error('Primary user seed error:', err.message);
+    }
+  }
 }).catch(err => console.error('DB init error:', err));
 
 // Middleware
 app.set('trust proxy', 1);
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
-app.use(cors({ origin: process.env.FRONTEND_URL || 'http://localhost:5173', credentials: true }));
+app.use(cors({ origin: getCorsOrigin, credentials: true }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text({ type: 'text/plain' }));
@@ -375,6 +450,24 @@ app.use('/api/', limiter);
 
 // Static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Direct Android APK download route
+app.get(['/diafit-ai.apk', '/download/apk'], (req, res) => {
+  const fs = require('fs');
+  const apkPaths = [
+    path.join(__dirname, '../DiaFit-AI.apk'),
+    path.join(__dirname, '../frontend/dist/diafit-ai.apk'),
+    path.join(__dirname, '../frontend/public/diafit-ai.apk'),
+    path.join(__dirname, '../frontend/android/app/build/outputs/apk/debug/app-debug.apk'),
+  ];
+  const target = apkPaths.find((f) => fs.existsSync(f));
+  if (target) {
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', 'attachment; filename="DiaFit-AI.apk"');
+    return res.sendFile(target);
+  }
+  return res.status(404).send('APK is currently building. Please wait a moment and refresh.');
+});
 
 // API Routes
 app.use('/api/v1/auth', authRoutes);
@@ -424,18 +517,38 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler
+// Serve Frontend built assets & SPA Fallback
+const frontendDist = path.join(__dirname, '../frontend/dist');
+const fs = require('fs');
+if (fs.existsSync(frontendDist)) {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path.startsWith('/uploads') || req.path.startsWith('/socket.io')) {
+      return next();
+    }
+    const indexPath = path.join(frontendDist, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
+    next();
+  });
+}
+
+// 404 handler for API routes
 app.use((req, res) => {
   res.status(404).json({ success: false, message: `Route ${req.originalUrl} not found` });
 });
 
 // Start server
 const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`\n  DiaFit AI Server running on port ${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n=========================================================`);
+  console.log(`  DiaFit AI Server running on port ${PORT}`);
   console.log(`  Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`  API: http://localhost:${PORT}/api/v1`);
-  console.log(`  Health: http://localhost:${PORT}/api/health\n`);
+  console.log(`  LAN Web App: http://10.189.225.89:${PORT}`);
+  console.log(`  APK Download: http://10.189.225.89:${PORT}/diafit-ai.apk`);
+  console.log(`=========================================================\n`);
 });
 
 module.exports = { app, server };

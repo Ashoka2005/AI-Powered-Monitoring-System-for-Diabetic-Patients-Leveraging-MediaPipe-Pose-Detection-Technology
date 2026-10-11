@@ -15,10 +15,10 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const { email } = req.body;
+      const normalizedEmail = (req.body.email || '').toLowerCase().trim();
 
       // Check if email already registered
-      const existingUser = await User.findOne({ email });
+      const existingUser = await User.findOne({ email: normalizedEmail });
       if (existingUser) {
         return res.status(409).json({ success: false, message: 'Email already registered' });
       }
@@ -28,16 +28,19 @@ router.post(
 
       // Save to database (upsert to handle re-sending)
       await Otp.findOneAndUpdate(
-        { email },
+        { email: normalizedEmail },
         { code: otpCode, createdAt: new Date() },
         { upsert: true, new: true }
       );
 
-      console.log(`[OTP Verification] Generated code ${otpCode} for email ${email}`);
+      console.log(`\n======================================================`);
+      console.log(`🔑 [OTP Verification] Email: ${normalizedEmail}`);
+      console.log(`🔑 [OTP Code]: ${otpCode}`);
+      console.log(`======================================================\n`);
 
-      // Send Email (Run asynchronously in the background so the API response isn't delayed by SMTP firewall block/timeout)
+      // Send Email asynchronously in the background
       sendEmail({
-        to: email,
+        to: normalizedEmail,
         subject: 'DiaFit AI - Email Verification Code',
         html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
@@ -51,11 +54,18 @@ router.post(
             <p style="color: #6b7280; font-size: 12px;">This code is valid for 10 minutes. If you did not request this code, please ignore this email.</p>
           </div>
         `,
-      }).catch(err => console.error('SMTP background delivery error:', err.message));
+      }).catch(err => console.error('[REGISTER OTP] Delivery warning:', err.message));
+
+      const hasRealSmtp = Boolean(
+        process.env.SMTP_USER &&
+        (process.env.SMTP_PASS || process.env.EMAIL_APP_PASSWORD)
+      );
 
       res.json({
         success: true,
-        message: 'Verification code sent to email'
+        message: 'Verification code sent to your email address. Please check your inbox.',
+        emailDelivered: hasRealSmtp,
+        ...(hasRealSmtp ? {} : { fallbackCodeNotice: `Server Notice: Code is ${otpCode}` })
       });
     } catch (error) {
       res.status(500).json({ success: false, message: error.message });
@@ -73,14 +83,13 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const { email, code } = req.body;
+      const normalizedEmail = (req.body.email || '').toLowerCase().trim();
+      const code = (req.body.code || '').trim();
 
-      // Allow 123456 as a master bypass code for testing/development deployments
-      if (code !== '123456') {
-        const otpDoc = await Otp.findOne({ email, code });
-        if (!otpDoc) {
-          return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
-        }
+      // Require exact OTP code generated and stored in database
+      const otpDoc = await Otp.findOne({ email: normalizedEmail, code });
+      if (!otpDoc) {
+        return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
       }
 
       res.json({ success: true, message: 'Email verified successfully' });
@@ -98,34 +107,38 @@ router.post(
     body('lastName').trim().notEmpty().withMessage('Last name is required'),
     body('email').isEmail().withMessage('Valid email is required'),
     body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 characters'),
-    body('otp').isLength({ min: 6, max: 6 }).withMessage('Valid 6-digit OTP verification code is required'),
+    body('otp').optional(),
+    body('phone').optional(),
     body('role').optional().isIn(['patient', 'doctor', 'admin']).withMessage('Invalid role'),
   ],
   validate,
   async (req, res) => {
     try {
-      const { firstName, lastName, email, password, role, phone, otp, profession, emergencyContactName, emergencyContactPhone, emergencyContactEmail, emergencyContactRelationship } = req.body;
+      const { firstName, lastName, password, role, phone, profession, emergencyContactName, emergencyContactPhone, emergencyContactEmail, emergencyContactRelationship, diabetesType } = req.body;
+      const normalizedEmail = (req.body.email || '').toLowerCase().trim();
+      const otp = (req.body.otp || '').trim();
 
-      const existingUser = await User.findOne({ email });
+      const existingUser = await User.findOne({ email: normalizedEmail });
       if (existingUser) {
-        return res.status(409).json({ success: false, message: 'Email already registered' });
+        return res.status(409).json({ success: false, message: 'Email already registered. Please sign in.' });
       }
 
-      // Verify OTP document exists (Allow 123456 as a master bypass code for testing/development deployments)
-      if (otp !== '123456') {
-        const otpDoc = await Otp.findOne({ email, code: otp });
+      // If OTP was provided, verify it
+      if (otp) {
+        const otpDoc = await Otp.findOne({ email: normalizedEmail, code: otp });
         if (!otpDoc) {
           return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
         }
+        await Otp.deleteOne({ email: normalizedEmail });
       }
 
       const user = await User.create({
         firstName,
         lastName,
-        email,
+        email: normalizedEmail,
         password,
         role: role || 'patient',
-        phone,
+        phone: phone || '',
         profile: {
           profession: profession || '',
           emergencyContact: {
@@ -135,10 +148,13 @@ router.post(
             relationship: emergencyContactRelationship || ''
           }
         },
+        patientInfo: {
+          diabetesType: diabetesType || ''
+        }
       });
 
       // Delete verified OTP
-      await Otp.deleteOne({ email });
+      await Otp.deleteOne({ email: normalizedEmail });
 
       const token = user.generateToken();
       const refreshToken = user.generateRefreshToken();
@@ -161,22 +177,262 @@ router.post(
   }
 );
 
-// Login
+// Send Login OTP (Email verification code for personal email login)
 router.post(
-  '/login',
-  [body('email').isEmail().withMessage('Valid email is required'), body('password').notEmpty().withMessage('Password is required')],
+  '/login-send-otp',
+  [body('email').isEmail().withMessage('Valid email is required')],
   validate,
   async (req, res) => {
     try {
-      const { email, password } = req.body;
-      const user = await User.findOne({ email }).select('+password');
+      const normalizedEmail = (req.body.email || '').toLowerCase().trim();
+      const password = req.body.password;
 
-      if (!user || !(await user.comparePassword(password))) {
-        return res.status(401).json({ success: false, message: 'Invalid credentials' });
+      // Check if user exists
+      let user = await User.findOne({ email: normalizedEmail }).select('+password');
+      if (user && !user.isActive) {
+        return res.status(403).json({ success: false, message: 'Account has been deactivated' });
+      }
+
+      // If password is provided, verify it
+      if (user && password) {
+        const isMatch = await user.comparePassword(password);
+        if (!isMatch) {
+          return res.status(401).json({ success: false, message: 'Invalid credentials. Incorrect password.' });
+        }
+      }
+
+      // Generate 6-digit OTP code
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+      // Upsert to Otp collection
+      await Otp.findOneAndUpdate(
+        { email: normalizedEmail },
+        { code: otpCode, createdAt: new Date() },
+        { upsert: true, new: true }
+      );
+
+      const displayName = user ? user.firstName : 'Patient';
+
+      console.log(`\n======================================================`);
+      console.log(`🔑 [LOGIN OTP] Email: ${normalizedEmail} (User: ${displayName})`);
+      console.log(`🔑 [LOGIN OTP Code]: ${otpCode}`);
+      console.log(`======================================================\n`);
+
+      // Dispatch Email asynchronously in background
+      sendEmail({
+        to: normalizedEmail,
+        subject: 'DiaFit AI - Your Verification Code',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <h2 style="color: #4f46e5; margin: 0; font-size: 24px;">DiaFit AI Healthcare</h2>
+              <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Smart Diabetes Health & Exercise Monitoring</p>
+            </div>
+            <hr style="border: 0; border-top: 1px solid #f1f5f9; margin-bottom: 24px;" />
+            <p style="color: #334155; font-size: 15px;">Hello <strong>${displayName}</strong>,</p>
+            <p style="color: #334155; font-size: 15px; line-height: 1.5;">Your one-time verification code to access DiaFit AI is:</p>
+            <div style="background: linear-gradient(135deg, #eef2ff, #f5f3ff); border: 2px dashed #6366f1; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+              <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #4338ca;">${otpCode}</span>
+            </div>
+            <p style="color: #64748b; font-size: 13px; line-height: 1.5;">This code will expire in 10 minutes. If you did not initiate this request, you can safely ignore this email.</p>
+            <hr style="border: 0; border-top: 1px solid #f1f5f9; margin-top: 24px; margin-bottom: 16px;" />
+            <p style="color: #94a3b8; font-size: 12px; text-align: center; margin: 0;">&copy; DiaFit AI Healthcare. All rights reserved.</p>
+          </div>
+        `,
+      }).catch(err => console.error('[LOGIN OTP] Delivery warning:', err.message));
+
+      const hasRealSmtp = Boolean(
+        process.env.SMTP_USER &&
+        (process.env.SMTP_PASS || process.env.EMAIL_APP_PASSWORD)
+      );
+
+      res.json({
+        success: true,
+        requireOtp: true,
+        isNewUser: !user,
+        message: `A 6-digit verification code has been sent to ${normalizedEmail}. Please check your email inbox.`,
+        emailDelivered: hasRealSmtp,
+        ...(hasRealSmtp ? {} : { fallbackCodeNotice: `Server Notice: Code is ${otpCode}` })
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// Verify Login OTP
+router.post(
+  '/login-verify-otp',
+  [
+    body('email').isEmail().withMessage('Valid email is required'),
+    body('code').isLength({ min: 6, max: 6 }).withMessage('Verification code must be 6 digits'),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const normalizedEmail = (req.body.email || '').toLowerCase().trim();
+      const code = (req.body.code || '').trim();
+
+      // Require exact OTP code generated and stored in database
+      const otpDoc = await Otp.findOne({ email: normalizedEmail, code });
+      if (!otpDoc) {
+        return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
+      }
+
+      let user = await User.findOne({ email: normalizedEmail });
+      let isNewUser = false;
+
+      // Auto-create user account if logging in for the first time
+      if (!user) {
+        const crypto = require('crypto');
+        const rawPrefix = normalizedEmail.split('@')[0].replace(/[^a-zA-Z0-9]/g, '');
+        const firstName = rawPrefix ? (rawPrefix.charAt(0).toUpperCase() + rawPrefix.slice(1)) : 'Patient';
+
+        user = await User.create({
+          firstName,
+          lastName: 'User',
+          email: normalizedEmail,
+          password: crypto.randomBytes(16).toString('hex'),
+          role: 'patient',
+          profile: {
+            emergencyContact: {
+              name: '',
+              phone: '',
+              email: '',
+              relationship: ''
+            }
+          },
+          patientInfo: {
+            diabetesType: ''
+          }
+        });
+        isNewUser = true;
       }
 
       if (!user.isActive) {
         return res.status(403).json({ success: false, message: 'Account has been deactivated' });
+      }
+
+      // Delete verified OTP
+      await Otp.deleteOne({ email: normalizedEmail });
+
+      const token = user.generateToken();
+      const refreshToken = user.generateRefreshToken();
+      user.refreshToken = refreshToken;
+      await user.save();
+
+      res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', maxAge: 7 * 24 * 60 * 60 * 1000 });
+
+      const hasEmergencyEmail = Boolean(user.profile?.emergencyContact?.email);
+      const hasDiabetesData = Boolean(user.patientInfo?.diabetesType);
+      const profileCompleted = Boolean(hasEmergencyEmail && hasDiabetesData);
+
+      res.json({
+        success: true,
+        message: 'Login successful',
+        data: {
+          user: {
+            id: user._id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            role: user.role,
+            avatar: user.avatar,
+            profile: user.profile,
+            patientInfo: user.patientInfo,
+          },
+          token,
+          refreshToken,
+          isNewUser,
+          profileCompleted,
+        },
+      });
+    } catch (error) {
+      res.status(500).json({ success: false, message: error.message });
+    }
+  }
+);
+
+// Login (supports email OR phone number + password, or OTP)
+router.post(
+  '/login',
+  [body('email').notEmpty().withMessage('Valid email or phone number is required'), body('password').notEmpty().withMessage('Password is required')],
+  validate,
+  async (req, res) => {
+    try {
+      const identifier = (req.body.email || '').trim();
+      const { password, otp, sendOtp } = req.body;
+
+      let user;
+      if (identifier.includes('@')) {
+        user = await User.findOne({ email: identifier.toLowerCase() }).select('+password');
+      } else {
+        user = await User.findOne({ phone: identifier }).select('+password');
+      }
+
+      if (!user || !(await user.comparePassword(password))) {
+        return res.status(401).json({ success: false, message: 'Invalid credentials. Incorrect email/phone or password.' });
+      }
+
+      if (!user.isActive) {
+        return res.status(403).json({ success: false, message: 'Account has been deactivated' });
+      }
+
+      // If client requests OTP verification before logging in
+      if (sendOtp) {
+        const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+        await Otp.findOneAndUpdate(
+          { email: normalizedEmail },
+          { code: otpCode, createdAt: new Date() },
+          { upsert: true, new: true }
+        );
+
+        console.log(`\n======================================================`);
+        console.log(`🔑 [LOGIN OTP] User: ${user.firstName} (${normalizedEmail})`);
+        console.log(`🔑 [LOGIN OTP Code]: ${otpCode}`);
+        console.log(`======================================================\n`);
+
+        const emailSent = await sendEmail({
+          to: normalizedEmail,
+          subject: 'DiaFit AI - Login Verification Code',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 16px; background-color: #ffffff;">
+              <div style="text-align: center; margin-bottom: 24px;">
+                <h2 style="color: #4f46e5; margin: 0; font-size: 24px;">DiaFit AI Healthcare</h2>
+                <p style="color: #64748b; font-size: 14px; margin-top: 4px;">Smart Diabetes Health & Exercise Monitoring</p>
+              </div>
+              <hr style="border: 0; border-top: 1px solid #f1f5f9; margin-bottom: 24px;" />
+              <p style="color: #334155; font-size: 15px;">Hello <strong>${user.firstName}</strong>,</p>
+              <p style="color: #334155; font-size: 15px; line-height: 1.5;">You requested to sign in to your DiaFit AI account. Please use the following 6-digit verification code to complete your login:</p>
+              <div style="background: linear-gradient(135deg, #eef2ff, #f5f3ff); border: 2px dashed #6366f1; border-radius: 12px; padding: 20px; text-align: center; margin: 24px 0;">
+                <span style="font-size: 32px; font-weight: 800; letter-spacing: 6px; color: #4338ca;">${otpCode}</span>
+              </div>
+              <p style="color: #64748b; font-size: 13px; line-height: 1.5;">This code will expire in 10 minutes.</p>
+            </div>
+          `,
+        });
+
+        const hasRealSmtp = Boolean(
+          process.env.SMTP_USER &&
+          (process.env.SMTP_PASS || process.env.EMAIL_APP_PASSWORD)
+        );
+
+        return res.json({
+          success: true,
+          requireOtp: true,
+          message: `Verification code sent to ${normalizedEmail}. Please check your inbox.`,
+          emailDelivered: hasRealSmtp,
+          ...(hasRealSmtp ? {} : { fallbackCodeNotice: `Server Notice: Code is ${otpCode}` })
+        });
+      }
+
+      // If OTP was provided with credentials, verify it
+      if (otp) {
+        const otpDoc = await Otp.findOne({ email: normalizedEmail, code: otp.trim() });
+        if (!otpDoc) {
+          return res.status(400).json({ success: false, message: 'Invalid or expired verification code' });
+        }
+        await Otp.deleteOne({ email: normalizedEmail });
       }
 
       const token = user.generateToken();
@@ -197,6 +453,7 @@ router.post(
             role: user.role,
             avatar: user.avatar,
             profile: user.profile,
+            patientInfo: user.patientInfo,
           },
           token,
           refreshToken,
