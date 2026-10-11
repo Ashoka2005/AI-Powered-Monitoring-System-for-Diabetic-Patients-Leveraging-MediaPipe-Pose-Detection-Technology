@@ -17,11 +17,26 @@ export const setServerIp = (ip) => {
 
 export const getServerBase = () => {
   if (typeof window === 'undefined') return '/api/v1';
+
+  // 1. Explicit Environment Variable (e.g. deployed backend URL configured in Vercel)
+  if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.startsWith('http')) {
+    return import.meta.env.VITE_API_URL;
+  }
   
+  // 2. Custom Server IP saved in localStorage (for mobile LAN testing)
   const customIp = localStorage.getItem('diafit_server_ip');
   if (customIp && customIp.trim()) return `http://${customIp.trim()}:5000/api/v1`;
 
-  // Native Android APK / Capacitor / File URL environment:
+  // 3. Cloud / Vercel Web Deployment (Do NOT append :5000 to public domains)
+  if (window.location.hostname && (
+    window.location.hostname.endsWith('.vercel.app') || 
+    window.location.hostname.includes('.render.com') || 
+    window.location.hostname.includes('.railway.app')
+  )) {
+    return import.meta.env.VITE_API_URL || '/api/v1';
+  }
+
+  // 4. Native Android APK / Capacitor / File URL environment:
   const isNativeApp = window.Capacitor !== undefined || 
     window.location.protocol === 'file:' ||
     (window.location.hostname === 'localhost' && window.location.protocol === 'https:' && !window.location.port);
@@ -30,12 +45,16 @@ export const getServerBase = () => {
     return `http://${DEFAULT_HOST_IP}:5000/api/v1`;
   }
 
-  // Mobile or LAN browser directly accessing computer IP
-  if (window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+  // 5. Local LAN IP access (e.g. 192.168.x.x or 10.x.x.x)
+  if (window.location.hostname && (
+    window.location.hostname.startsWith('192.168.') || 
+    window.location.hostname.startsWith('10.') || 
+    window.location.hostname.startsWith('172.')
+  )) {
     return `${window.location.protocol}//${window.location.hostname}:5000/api/v1`;
   }
 
-  // Desktop localhost browser (vite dev proxy forwards /api to localhost:5000)
+  // 6. Desktop localhost browser (vite dev proxy forwards /api to localhost:5000)
   return import.meta.env.VITE_API_URL || '/api/v1';
 };
 

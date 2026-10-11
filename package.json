@@ -6,6 +6,7 @@
   "scripts": {
     "backend": "cd backend && node server.js",
     "backend:dev": "cd backend && npx nodemon server.js",
+    "build": "cd frontend && npm install && npm run build",
     "frontend": "cd frontend && npm run dev",
     "frontend:build": "cd frontend && npm run build",
     "ml-service": "cd ml-service && python app.py",
