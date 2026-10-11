@@ -366,8 +366,8 @@ router.post('/session/:sessionId/end-beacon', async (req, res) => {
     if (!token) return res.status(401).json({ success: false, message: 'Unauthorized' });
 
     const jwt = require('jsonwebtoken');
-    const User = require('../models/User');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const jwtSecret = process.env.JWT_SECRET || 'diafit-ai-dev-secret-key-2024-change-in-production';
+    const decoded = jwt.verify(token, jwtSecret);
     const user = await User.findById(decoded.id).select('-password');
     if (!user) return res.status(401).json({ success: false, message: 'User not found' });
 
@@ -495,9 +495,8 @@ router.get('/session/:sessionId/download-pdf', async (req, res) => {
     }
     if (!token) return res.status(401).json({ success: false, message: 'Unauthorized access' });
 
-    const jwt = require('jsonwebtoken');
-    const User = require('../models/User');
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const jwtSecret = process.env.JWT_SECRET || 'diafit-ai-dev-secret-key-2024-change-in-production';
+    const decoded = jwt.verify(token, jwtSecret);
     const user = await User.findById(decoded.id).select('-password');
     if (!user) return res.status(401).json({ success: false, message: 'User not found' });
 

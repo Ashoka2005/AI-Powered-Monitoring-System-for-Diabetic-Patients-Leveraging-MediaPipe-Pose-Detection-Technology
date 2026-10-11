@@ -453,7 +453,8 @@ router.post('/refresh', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Refresh token required' });
     }
 
-    const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    const refreshSecret = process.env.JWT_REFRESH_SECRET || 'diafit-ai-refresh-secret-2024-change-in-production';
+    const decoded = jwt.verify(refreshToken, refreshSecret);
     const user = await User.findById(decoded.id);
 
     if (!user || user.refreshToken !== refreshToken) {
@@ -476,7 +477,8 @@ router.post('/logout', async (req, res) => {
   try {
     if (req.headers.authorization) {
       const token = req.headers.authorization.split(' ')[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const jwtSecret = process.env.JWT_SECRET || 'diafit-ai-dev-secret-key-2024-change-in-production';
+      const decoded = jwt.verify(token, jwtSecret);
       await User.findByIdAndUpdate(decoded.id, { refreshToken: null });
     }
     res.clearCookie('token');
@@ -494,7 +496,8 @@ router.post('/forgot-password', [body('email').isEmail()], validate, async (req,
       return res.json({ success: true, message: 'If the email exists, a reset link has been sent' });
     }
 
-    const resetToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    const jwtSecret = process.env.JWT_SECRET || 'diafit-ai-dev-secret-key-2024-change-in-production';
+    const resetToken = jwt.sign({ id: user._id }, jwtSecret, { expiresIn: '1h' });
     // In production, send email with reset link containing resetToken
     res.json({ success: true, message: 'Password reset link sent to email', resetToken }); // resetToken in dev only
   } catch (error) {
@@ -509,7 +512,8 @@ router.post(
   validate,
   async (req, res) => {
     try {
-      const decoded = jwt.verify(req.body.token, process.env.JWT_SECRET);
+      const jwtSecret = process.env.JWT_SECRET || 'diafit-ai-dev-secret-key-2024-change-in-production';
+      const decoded = jwt.verify(req.body.token, jwtSecret);
       const user = await User.findById(decoded.id).select('+password');
       if (!user) {
         return res.status(400).json({ success: false, message: 'Invalid reset token' });

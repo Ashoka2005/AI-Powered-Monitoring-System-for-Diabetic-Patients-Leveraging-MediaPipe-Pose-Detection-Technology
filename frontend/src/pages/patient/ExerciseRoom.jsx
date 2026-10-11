@@ -381,7 +381,7 @@ export default function ExerciseRoom() {
         const token = localStorage.getItem('token');
         const baseUrl = api.defaults.baseURL.startsWith('http')
           ? api.defaults.baseURL
-          : `${window.location.protocol}//${window.location.hostname}:5000${api.defaults.baseURL}`;
+          : `${window.location.origin}${api.defaults.baseURL}`;
 
         const blob = new Blob([payload], { type: 'text/plain' });
         navigator.sendBeacon(`${baseUrl}/exercises/session/${data.sessionId}/end-beacon?token=${token}`, blob);
@@ -2016,7 +2016,7 @@ export default function ExerciseRoom() {
                       const token = localStorage.getItem('token');
                       const baseUrl = api.defaults.baseURL.startsWith('http')
                         ? api.defaults.baseURL
-                        : `${window.location.protocol}//${window.location.hostname}:5000${api.defaults.baseURL}`;
+                        : `${window.location.origin}${api.defaults.baseURL}`;
                       window.open(`${baseUrl}/exercises/session/${sessionId}/download-pdf?token=${token}`, '_blank');
                       toast.success('Downloading PDF report...');
                     }}

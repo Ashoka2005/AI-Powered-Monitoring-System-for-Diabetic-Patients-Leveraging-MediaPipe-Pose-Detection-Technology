@@ -15,7 +15,8 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Not authorized to access this route' });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const jwtSecret = process.env.JWT_SECRET || 'diafit-ai-dev-secret-key-2024-change-in-production';
+    const decoded = jwt.verify(token, jwtSecret);
     req.user = await User.findById(decoded.id).select('-password');
 
     if (!req.user) {

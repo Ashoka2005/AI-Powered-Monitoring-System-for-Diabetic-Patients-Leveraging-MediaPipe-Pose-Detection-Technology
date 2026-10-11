@@ -90,12 +90,20 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 
 // Generate JWT
 userSchema.methods.generateToken = function () {
-  return jwt.sign({ id: this._id, role: this.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRE });
+  return jwt.sign(
+    { id: this._id, role: this.role },
+    process.env.JWT_SECRET || 'diafit-ai-dev-secret-key-2024-change-in-production',
+    { expiresIn: process.env.JWT_EXPIRE || '7d' }
+  );
 };
 
 // Generate refresh token
 userSchema.methods.generateRefreshToken = function () {
-  return jwt.sign({ id: this._id }, process.env.JWT_REFRESH_SECRET, { expiresIn: process.env.JWT_REFRESH_EXPIRE });
+  return jwt.sign(
+    { id: this._id },
+    process.env.JWT_REFRESH_SECRET || 'diafit-ai-refresh-secret-2024-change-in-production',
+    { expiresIn: process.env.JWT_REFRESH_EXPIRE || '30d' }
+  );
 };
 
 // Virtual for full name
