@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
 import toast from 'react-hot-toast';
@@ -10,6 +11,7 @@ import { useAuth } from '../../context/AuthContext';
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
 export default function HealthLog() {
+  const navigate = useNavigate();
   const { user, updateProfile } = useAuth();
   const [records, setRecords] = useState([]);
   const [trends, setTrends] = useState(null);
@@ -44,6 +46,7 @@ export default function HealthLog() {
     let steps = [];
     let title = '';
     let alertType = 'info';
+    let recommendedExercise = null;
 
     if (status === 'low') {
       alertType = 'danger';
@@ -63,6 +66,11 @@ export default function HealthLog() {
     } else if (status === 'normal') {
       alertType = 'success';
       title = `Perfect Blood Sugar Level! (${value} mg/dL)`;
+      recommendedExercise = {
+        slug: 'squat',
+        name: 'Bodyweight Squats & Resistance Training',
+        description: 'Your blood glucose is in the ideal range. Resistance exercises optimize GLUT4 glucose transporter activity and promote long-term metabolic control.'
+      };
       steps = [
         "Your blood glucose is in the optimal target range.",
         "Continue following your standard daily meal, hydration, and exercise plan.",
@@ -71,6 +79,11 @@ export default function HealthLog() {
     } else if (status === 'high') {
       alertType = 'warning';
       title = `${isType1 ? 'Type 1' : 'Type 2'} Diabetes - High Blood Sugar Alert (${value} mg/dL)`;
+      recommendedExercise = {
+        slug: 'walking-place',
+        name: 'Walking in Place / Seated March',
+        description: 'Elevated glucose detected. Moderate rhythmic cardio activates muscular contractions to burn glucose directly from the bloodstream without metabolic stress.'
+      };
       steps = isType1 ? [
         "Administer a correction dose of rapid-acting insulin if advised by your endocrinologist.",
         "Drink 1-2 tall glasses of water to help your kidneys filter out excess glucose.",
@@ -79,12 +92,17 @@ export default function HealthLog() {
       ] : [
         "Check if you missed a dose of your prescribed oral diabetes medication or insulin.",
         "Drink 2 glasses of water to prevent dehydration and flush glucose.",
-        "Perform light, low-intensity exercise (e.g., a 15-minute walk) to help muscles consume glucose. Avoid strenuous workouts.",
+        "Perform light, low-intensity exercise (e.g., Walking in Place) to help muscles consume glucose. Avoid strenuous workouts.",
         "Review your recent meal for carbohydrate triggers."
       ];
     } else {
       alertType = 'danger';
       title = `CRITICAL: Very High Blood Sugar Alert (${value} mg/dL)`;
+      recommendedExercise = {
+        slug: 'seated-march',
+        name: 'Light Seated March (Gentle Only)',
+        description: 'Very high glucose. Hydrate first and rest. Only low-intensity seated movement is recommended after symptoms stabilize.'
+      };
       steps = isType1 ? [
         "Immediately test your urine or blood for KETONES.",
         "If ketones are moderate or high, contact your doctor immediately or go to the nearest Emergency Room to prevent Diabetic Ketoacidosis (DKA).",
@@ -100,7 +118,7 @@ export default function HealthLog() {
       ];
     }
 
-    return { title, steps, alertType, status };
+    return { title, steps, alertType, status, recommendedExercise, value };
   };
 
   const handleLogClick = () => {
@@ -163,7 +181,8 @@ export default function HealthLog() {
       setShowForm(false);
       loadData();
 
-      if (isSugar) {
+      if (isSugar && !isNaN(val)) {
+        localStorage.setItem('diafit_latest_sugar', val.toString());
         const procedure = determineProcedure(user?.patientInfo?.diabetesType, val);
         setNextProcedure(procedure);
       }
@@ -481,7 +500,7 @@ export default function HealthLog() {
               <h3 className="text-lg font-bold text-gray-900 leading-tight">{nextProcedure.title}</h3>
             </div>
             
-            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 mb-6">
+            <div className="bg-blue-50/50 p-4 rounded-xl border border-blue-100 mb-4">
               <h4 className="font-bold text-blue-900 text-sm mb-3 flex items-center gap-1">📋 Next Procedure Guidance:</h4>
               <ol className="list-decimal list-inside text-sm text-gray-700 space-y-3 leading-relaxed">
                 {nextProcedure.steps.map((step, index) => (
@@ -490,8 +509,46 @@ export default function HealthLog() {
               </ol>
             </div>
 
-            <div className="flex justify-end">
-              <button onClick={() => setNextProcedure(null)} className="btn-primary px-6 py-2.5">Acknowledge & Close</button>
+            {/* AI Exercise Recommendation Based on Reading */}
+            {nextProcedure.recommendedExercise ? (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 mb-6 shadow-xs">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-black uppercase text-emerald-900 tracking-wider flex items-center gap-1.5">
+                    <span>⭐</span> AI Exercise Recommendation
+                  </span>
+                  <span className="text-[10px] font-bold bg-emerald-200/70 text-emerald-900 px-2 py-0.5 rounded-full">
+                    Recommended
+                  </span>
+                </div>
+                <h5 className="font-bold text-gray-900 text-sm">{nextProcedure.recommendedExercise.name}</h5>
+                <p className="text-xs text-emerald-800/90 mt-1 leading-relaxed font-medium">
+                  {nextProcedure.recommendedExercise.description}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem('diafit_latest_sugar', nextProcedure.value.toString());
+                    localStorage.setItem('diafit_recommended_exercise', nextProcedure.recommendedExercise.slug);
+                    navigate(`/exercise?exercise=${nextProcedure.recommendedExercise.slug}&sugar=${nextProcedure.value}`);
+                  }}
+                  className="mt-3.5 w-full py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs rounded-xl shadow-md hover:shadow-lg transition flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>🏋️</span> Start Recommended Exercise Now →
+                </button>
+              </div>
+            ) : nextProcedure.status === 'low' ? (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-6 text-xs text-amber-800 font-medium">
+                ⚠️ Strenuous workouts are temporarily locked until blood sugar recovers above 90 mg/dL.
+              </div>
+            ) : null}
+
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setNextProcedure(null)} 
+                className="btn-secondary px-5 py-2 text-xs"
+              >
+                Close Guidance
+              </button>
             </div>
           </motion.div>
         </div>

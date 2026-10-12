@@ -148,13 +148,71 @@ function getJwtRefreshSecret() {
   return process.env.JWT_REFRESH_SECRET || 'diafit-ai-refresh-secret-2024-change-in-production';
 }
 
+function applyDotNotationUpdates(target, updates) {
+  if (!target || !updates) return target;
+  for (const [key, val] of Object.entries(updates)) {
+    if (key.includes('.')) {
+      const parts = key.split('.');
+      let curr = target;
+      for (let i = 0; i < parts.length - 1; i++) {
+        if (!curr[parts[i]] || typeof curr[parts[i]] !== 'object') {
+          curr[parts[i]] = {};
+        }
+        curr = curr[parts[i]];
+      }
+      curr[parts[parts.length - 1]] = val;
+    } else {
+      if (typeof val === 'object' && val !== null && !Array.isArray(val) && !(val instanceof Date)) {
+        target[key] = { ...(target[key] || {}), ...val };
+      } else {
+        target[key] = val;
+      }
+    }
+  }
+  return target;
+}
+
 function makeDocInstance(data) {
+  const cleanData = { ...data };
+  const profile = { ...(cleanData.profile || {}) };
+  const patientInfo = { ...(cleanData.patientInfo || {}) };
+  const doctorInfo = { ...(cleanData.doctorInfo || {}) };
+
+  // Parse any dot-notation keys that may have been placed on cleanData
+  for (const [k, v] of Object.entries(cleanData)) {
+    if (k.startsWith('profile.')) {
+      applyDotNotationUpdates(profile, { [k.replace('profile.', '')]: v });
+      delete cleanData[k];
+    } else if (k.startsWith('patientInfo.')) {
+      applyDotNotationUpdates(patientInfo, { [k.replace('patientInfo.', '')]: v });
+      delete cleanData[k];
+    } else if (k.startsWith('doctorInfo.')) {
+      applyDotNotationUpdates(doctorInfo, { [k.replace('doctorInfo.', '')]: v });
+      delete cleanData[k];
+    }
+  }
+
+  cleanData.profile = profile;
+  cleanData.patientInfo = patientInfo;
+  cleanData.doctorInfo = doctorInfo;
+
   const doc = {
-    _id: data._id || 'doc_' + Math.random().toString(36).substring(2, 10),
-    ...data,
-    isActive: data.isActive !== undefined ? data.isActive : true,
-    createdAt: data.createdAt || new Date(),
-    updatedAt: data.updatedAt || new Date(),
+    _id: cleanData._id || 'doc_' + Math.random().toString(36).substring(2, 10),
+    ...cleanData,
+    profile,
+    patientInfo,
+    doctorInfo,
+    isActive: cleanData.isActive !== undefined ? cleanData.isActive : true,
+    createdAt: cleanData.createdAt || new Date(),
+    updatedAt: cleanData.updatedAt || new Date(),
+    get fullName() {
+      return `${this.firstName || ''} ${this.lastName || ''}`.trim() || 'Patient';
+    },
+    get bmi() {
+      if (!this.profile?.height || !this.profile?.weight) return null;
+      const heightM = this.profile.height / 100;
+      return parseFloat((this.profile.weight / (heightM * heightM)).toFixed(1));
+    },
     comparePassword: async function (candidate) {
       if (!this.password) return false;
       return bcrypt.compare(candidate, this.password);
@@ -177,14 +235,16 @@ function makeDocInstance(data) {
       const idx = users.findIndex(u => u._id === this._id);
       if (idx !== -1) {
         users[idx] = this;
+      } else {
+        users.push(this);
       }
       return this;
     },
     toObject: function () {
-      return { ...this };
+      return { ...this, bmi: this.bmi, fullName: this.fullName };
     },
     toJSON: function () {
-      return { ...this };
+      return { ...this, bmi: this.bmi, fullName: this.fullName };
     }
   };
   return doc;
@@ -310,10 +370,17 @@ function initModelFallbacks() {
       if (mongoose.connection.readyState === 1) {
         return origUserFindByIdAndUpdate.apply(this, arguments);
       }
-      const idx = users.findIndex(u => u._id.toString() === (id ? id.toString() : ''));
+      const targetId = id ? id.toString() : '';
+      const idx = users.findIndex(u => u._id.toString() === targetId);
       if (idx !== -1) {
-        users[idx] = { ...users[idx], ...(update || {}), updatedAt: new Date() };
-        return makeQueryPromise(makeDocInstance(users[idx]));
+        const raw = { ...users[idx] };
+        if (update) {
+          applyDotNotationUpdates(raw, update);
+        }
+        raw.updatedAt = new Date();
+        const doc = makeDocInstance(raw);
+        users[idx] = doc;
+        return makeQueryPromise(doc);
       }
       return makeQueryPromise(null);
     };
@@ -461,7 +528,11 @@ function initModelFallbacks() {
       if (mongoose.connection.readyState === 1) {
         return origHealthFind.apply(this, arguments);
       }
-      return makeQueryPromise(healthRecords);
+      let res = healthRecords;
+      if (query && query.userId) {
+        res = res.filter(r => r.userId?.toString() === query.userId?.toString());
+      }
+      return makeQueryPromise(res);
     };
 
     const origHealthCount = HealthRecord.countDocuments;
@@ -470,6 +541,16 @@ function initModelFallbacks() {
         return origHealthCount.apply(this, arguments);
       }
       return makeQueryPromise(healthRecords.length);
+    };
+
+    const origHealthAggregate = HealthRecord.aggregate;
+    HealthRecord.aggregate = function (pipeline) {
+      if (mongoose.connection.readyState === 1) {
+        return origHealthAggregate.apply(this, arguments);
+      }
+      // Simple mock for trends
+      const sugarLogs = healthRecords.filter(r => ['fasting', 'postprandial', 'random'].includes(r.metricType));
+      return makeQueryPromise(sugarLogs);
     };
 
     // 6. ExerciseSession Fallbacks
@@ -483,8 +564,16 @@ function initModelFallbacks() {
         ...data,
         startTime: data.startTime || new Date(),
         endTime: data.endTime || new Date(),
-        save: async function () { return this; },
-        deleteOne: async function () { return true; }
+        save: async function () {
+          const idx = exerciseSessions.findIndex(s => s._id === this._id);
+          if (idx !== -1) exerciseSessions[idx] = this;
+          return this;
+        },
+        deleteOne: async function () {
+          const idx = exerciseSessions.findIndex(s => s._id === this._id);
+          if (idx !== -1) exerciseSessions.splice(idx, 1);
+          return true;
+        }
       };
       exerciseSessions.push(doc);
       return doc;
@@ -495,7 +584,11 @@ function initModelFallbacks() {
       if (mongoose.connection.readyState === 1) {
         return origSessionFind.apply(this, arguments);
       }
-      return makeQueryPromise(exerciseSessions);
+      let res = exerciseSessions;
+      if (query && query.userId) {
+        res = res.filter(s => s.userId?.toString() === query.userId?.toString());
+      }
+      return makeQueryPromise(res);
     };
 
     const origSessionFindById = ExerciseSession.findById;
@@ -503,12 +596,36 @@ function initModelFallbacks() {
       if (mongoose.connection.readyState === 1) {
         return origSessionFindById.apply(this, arguments);
       }
-      const doc = exerciseSessions.find(s => s._id.toString() === (id ? id.toString() : ''));
-      return makeQueryPromise(doc ? {
+      const targetId = id ? id.toString() : '';
+      const doc = exerciseSessions.find(s => s._id.toString() === targetId);
+      if (!doc) return makeQueryPromise(null);
+      const wrapped = {
         ...doc,
-        save: async function () { return this; },
-        deleteOne: async function () { return true; }
-      } : null);
+        save: async function () {
+          const idx = exerciseSessions.findIndex(s => s._id === this._id);
+          if (idx !== -1) exerciseSessions[idx] = this;
+          return this;
+        },
+        deleteOne: async function () {
+          const idx = exerciseSessions.findIndex(s => s._id === this._id);
+          if (idx !== -1) exerciseSessions.splice(idx, 1);
+          return true;
+        }
+      };
+      return makeQueryPromise(wrapped);
+    };
+
+    const origSessionFindOne = ExerciseSession.findOne;
+    ExerciseSession.findOne = function (query) {
+      if (mongoose.connection.readyState === 1) {
+        return origSessionFindOne.apply(this, arguments);
+      }
+      let res = exerciseSessions;
+      if (query && query.userId) {
+        res = res.filter(s => s.userId?.toString() === query.userId?.toString());
+      }
+      const doc = res[res.length - 1] || null;
+      return makeQueryPromise(doc);
     };
 
     const origSessionCount = ExerciseSession.countDocuments;
@@ -518,6 +635,90 @@ function initModelFallbacks() {
       }
       return makeQueryPromise(exerciseSessions.length);
     };
+
+    const origSessionAggregate = ExerciseSession.aggregate;
+    ExerciseSession.aggregate = function (pipeline) {
+      if (mongoose.connection.readyState === 1) {
+        return origSessionAggregate.apply(this, arguments);
+      }
+      const totalSessions = exerciseSessions.length;
+      let totalDuration = 0;
+      let totalCalories = 0;
+      let totalAccuracy = 0;
+      let totalReps = 0;
+      exerciseSessions.forEach(s => {
+        totalDuration += s.duration || 0;
+        totalCalories += s.caloriesBurned || 0;
+        totalAccuracy += s.accuracyScore || 100;
+        totalReps += s.repsCompleted || 0;
+      });
+      const avgAccuracy = totalSessions > 0 ? totalAccuracy / totalSessions : 0;
+      return makeQueryPromise([{
+        totalSessions,
+        totalDuration,
+        totalCalories,
+        avgAccuracy,
+        totalReps
+      }]);
+    };
+
+    // 7. DietPlan Fallbacks
+    try {
+      const DietPlan = require('../models/DietPlan');
+      const dietPlans = [];
+
+      DietPlan.updateMany = function (query, update) {
+        if (mongoose.connection.readyState === 1) {
+          return DietPlan.prototype.constructor.updateMany?.apply(this, arguments) || makeQueryPromise({ acknowledged: true });
+        }
+        dietPlans.forEach(p => {
+          if (update.isActive !== undefined) p.isActive = update.isActive;
+        });
+        return makeQueryPromise({ acknowledged: true, modifiedCount: dietPlans.length });
+      };
+
+      DietPlan.create = async function (data) {
+        if (mongoose.connection.readyState === 1) {
+          return DietPlan.prototype.constructor.create?.apply(this, arguments);
+        }
+        const doc = {
+          _id: 'diet_' + Math.random().toString(36).substring(2, 10),
+          ...data,
+          createdAt: new Date(),
+          save: async function () { return this; }
+        };
+        dietPlans.push(doc);
+        return doc;
+      };
+
+      DietPlan.findOne = function (query) {
+        if (mongoose.connection.readyState === 1) {
+          return DietPlan.prototype.constructor.findOne?.apply(this, arguments);
+        }
+        const found = dietPlans.find(p => p.isActive) || dietPlans[0] || null;
+        return makeQueryPromise(found);
+      };
+
+      DietPlan.find = function (query) {
+        if (mongoose.connection.readyState === 1) {
+          return DietPlan.prototype.constructor.find?.apply(this, arguments);
+        }
+        return makeQueryPromise(dietPlans);
+      };
+    } catch (dpErr) {
+      console.warn('DietPlan fallback registration note:', dpErr.message);
+    }
+
+    // 8. Appointment & ChatMessage Fallbacks
+    try {
+      const Appointment = require('../models/Appointment');
+      Appointment.find = Appointment.find || function () { return makeQueryPromise([]); };
+      Appointment.countDocuments = Appointment.countDocuments || function () { return makeQueryPromise(0); };
+
+      const ChatMessage = require('../models/ChatMessage');
+      ChatMessage.find = ChatMessage.find || function () { return makeQueryPromise([]); };
+      ChatMessage.create = ChatMessage.create || async function (d) { return { _id: 'msg_1', ...d }; };
+    } catch (acErr) {}
 
     console.log('✓ [Data Layer] In-memory model fallbacks initialized successfully.');
   } catch (err) {

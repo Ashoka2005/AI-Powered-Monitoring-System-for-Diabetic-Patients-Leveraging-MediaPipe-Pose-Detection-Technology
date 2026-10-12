@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import Layout from '../../components/Layout';
 import api from '../../utils/api';
+import { useAuth } from '../../context/AuthContext';
 import { ExerciseCounter, detectFall, getPostureFeedback } from '../../utils/exerciseLogic';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
@@ -271,6 +273,18 @@ const renderExerciseGuideSVG = (slug) => {
 };
 
 export default function ExerciseRoom() {
+  const { user, updateProfile } = useAuth();
+  const location = useLocation();
+
+  const getCachedHealthProfile = useCallback(() => {
+    try {
+      const raw = localStorage.getItem('diafit_health_profile');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const [exercises, setExercises] = useState([]);
@@ -312,14 +326,21 @@ export default function ExerciseRoom() {
   const lastVoiceRef = useRef(0);
 
   // Profile Form States
-  const [profileForm, setProfileForm] = useState({
-    height: '',
-    weight: '',
-    age: '',
-    gender: '',
-    isPregnant: false,
-    pregnancyWeeks: 0,
-    conditions: []
+  const [profileForm, setProfileForm] = useState(() => {
+    const cached = getCachedHealthProfile();
+    return {
+      height: cached?.height || '',
+      weight: cached?.weight || '',
+      age: cached?.age || '',
+      gender: cached?.gender || '',
+      isPregnant: cached?.isPregnant || false,
+      pregnancyWeeks: cached?.pregnancyWeeks || 0,
+      conditions: cached?.conditions || [],
+      emergencyContactName: cached?.emergencyContact?.name || '',
+      emergencyContactPhone: cached?.emergencyContact?.phone || '',
+      emergencyContactEmail: cached?.emergencyContact?.email || '',
+      emergencyContactRelationship: cached?.emergencyContact?.relationship || 'Emergency Contact'
+    };
   });
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
@@ -335,7 +356,7 @@ export default function ExerciseRoom() {
       .then(res => {
         setRecommendations(res.data.data);
         const recs = res.data.data.recommendations;
-        const combined = [...recs.primary, ...recs.secondary, ...recs.caution];
+        const combined = [...(recs.primary || []), ...(recs.secondary || []), ...(recs.caution || [])];
         setExercises(combined);
       })
       .catch(() => {
@@ -343,6 +364,24 @@ export default function ExerciseRoom() {
         api.get('/exercises').then(res => setExercises(res.data.data)).catch(() => {});
       });
   }, []);
+
+  // Listen to URL search parameters & cached sugar from HealthLog
+  useEffect(() => {
+    const queryParams = new URLSearchParams(location.search);
+    const exSlug = queryParams.get('exercise') || localStorage.getItem('diafit_selected_exercise');
+    const sugarVal = queryParams.get('sugar') || localStorage.getItem('diafit_latest_sugar');
+    
+    if (sugarVal) {
+      setPreExerciseSugar(sugarVal);
+    }
+    
+    if (exSlug && exercises.length > 0) {
+      const found = exercises.find(e => e.slug === exSlug || e._id === exSlug);
+      if (found) {
+        setConfiguringExercise(found);
+      }
+    }
+  }, [location.search, exercises]);
 
   const unmountRef = useRef({ isActive: false, sessionId: null, reps: 0, elapsed: 0, accuracy: 100, fallDetected: false, correctionsCount: 0, sessionFeedbackHistory: [], selectedExercise: null });
 
@@ -396,20 +435,32 @@ export default function ExerciseRoom() {
     };
   }, []);
 
-  // Initialize profile form once recommendations are loaded
+  // Initialize profile form once recommendations or user are loaded
   useEffect(() => {
-    if (recommendations && recommendations.profile) {
-      setProfileForm({
-        height: recommendations.profile.height || '',
-        weight: recommendations.profile.weight || '',
-        age: recommendations.profile.age || '',
-        gender: recommendations.profile.gender || '',
-        isPregnant: recommendations.profile.isPregnant || false,
-        pregnancyWeeks: recommendations.profile.pregnancyWeeks || 0,
-        conditions: recommendations.profile.conditions || []
-      });
+    const cached = getCachedHealthProfile();
+    const profile = recommendations?.profile || user?.profile || cached || {};
+    const patientInfo = user?.patientInfo || {};
+    const emContact = profile.emergencyContact || cached?.emergencyContact || user?.profile?.emergencyContact || {};
+
+    let calculatedAge = profile.age || '';
+    if (!calculatedAge && profile.dateOfBirth) {
+      calculatedAge = Math.floor((Date.now() - new Date(profile.dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
     }
-  }, [recommendations]);
+
+    setProfileForm(prev => ({
+      height: profile.height || prev.height || '',
+      weight: profile.weight || prev.weight || '',
+      age: calculatedAge || prev.age || '',
+      gender: profile.gender || prev.gender || '',
+      isPregnant: patientInfo.isPregnant !== undefined ? patientInfo.isPregnant : (profile.isPregnant ?? prev.isPregnant ?? false),
+      pregnancyWeeks: patientInfo.pregnancyWeeks || profile.pregnancyWeeks || prev.pregnancyWeeks || 0,
+      conditions: patientInfo.conditions || profile.conditions || prev.conditions || [],
+      emergencyContactName: emContact.name || prev.emergencyContactName || '',
+      emergencyContactPhone: emContact.phone || prev.emergencyContactPhone || '',
+      emergencyContactEmail: emContact.email || prev.emergencyContactEmail || '',
+      emergencyContactRelationship: emContact.relationship || prev.emergencyContactRelationship || 'Emergency Contact'
+    }));
+  }, [recommendations, user, getCachedHealthProfile]);
 
   useEffect(() => {
     setHasMedicalClearance(false);
@@ -430,12 +481,24 @@ export default function ExerciseRoom() {
         dateOfBirth = new Date(birthYear, 0, 1);
       }
       
+      const parsedHeight = parseFloat(profileForm.height);
+      const parsedWeight = parseFloat(profileForm.weight);
+      const computedBmi = (parsedHeight && parsedWeight) ? parseFloat((parsedWeight / ((parsedHeight / 100) ** 2)).toFixed(1)) : null;
+
+      const emergencyContact = {
+        name: profileForm.emergencyContactName?.trim() || '',
+        phone: profileForm.emergencyContactPhone?.trim() || '',
+        email: profileForm.emergencyContactEmail?.trim() || '',
+        relationship: profileForm.emergencyContactRelationship?.trim() || 'Emergency Contact'
+      };
+
       const payload = {
         profile: {
-          height: parseFloat(profileForm.height),
-          weight: parseFloat(profileForm.weight),
+          height: parsedHeight,
+          weight: parsedWeight,
           dateOfBirth: dateOfBirth,
           gender: profileForm.gender,
+          emergencyContact
         },
         patientInfo: {
           isPregnant: profileForm.isPregnant,
@@ -444,16 +507,64 @@ export default function ExerciseRoom() {
         }
       };
       
-      await api.put('/users/me', payload);
-      toast.success('Health profile updated successfully!');
+      // 1. Immediately store in localStorage so the page never reverts even across Vercel serverless cold starts
+      localStorage.setItem('diafit_health_profile', JSON.stringify({
+        height: parsedHeight,
+        weight: parsedWeight,
+        age: parseInt(profileForm.age) || null,
+        gender: profileForm.gender,
+        bmi: computedBmi,
+        isPregnant: profileForm.isPregnant,
+        pregnancyWeeks: profileForm.pregnancyWeeks,
+        conditions: profileForm.conditions,
+        emergencyContact
+      }));
+
+      // 2. Call AuthContext updateProfile
+      if (updateProfile) {
+        await updateProfile(payload);
+      } else {
+        await api.put('/users/me', payload);
+      }
       
-      // Re-fetch recommendations to sync
-      const res = await api.get('/exercises/recommendations');
-      setRecommendations(res.data.data);
-      const recs = res.data.data.recommendations;
-      const combined = [...recs.primary, ...recs.secondary, ...recs.caution];
-      setExercises(combined);
+      // 3. Immediately update in-memory recommendations.profile state
+      setRecommendations(prev => {
+        const currentProfile = prev?.profile || {};
+        return {
+          ...(prev || { recommendations: { primary: [], secondary: [], caution: [] } }),
+          profile: {
+            ...currentProfile,
+            height: parsedHeight,
+            weight: parsedWeight,
+            age: parseInt(profileForm.age) || currentProfile.age || 30,
+            bmi: computedBmi || currentProfile.bmi || 22.5,
+            bmiCategory: computedBmi ? (computedBmi < 18.5 ? 'Underweight' : computedBmi < 25 ? 'Normal Weight' : computedBmi < 30 ? 'Overweight' : 'Obese') : currentProfile.bmiCategory,
+            gender: profileForm.gender || currentProfile.gender,
+            isPregnant: profileForm.isPregnant,
+            pregnancyWeeks: profileForm.pregnancyWeeks,
+            conditions: profileForm.conditions,
+            emergencyContact
+          }
+        };
+      });
+
+      toast.success('Health profile and metrics updated successfully!');
       setIsProfileModalOpen(false);
+
+      // 4. Re-fetch recommendations in background to sync backend model
+      try {
+        const res = await api.get('/exercises/recommendations');
+        if (res.data?.data) {
+          setRecommendations(res.data.data);
+          const recs = res.data.data.recommendations;
+          if (recs) {
+            const combined = [...(recs.primary || []), ...(recs.secondary || []), ...(recs.caution || [])];
+            setExercises(combined);
+          }
+        }
+      } catch (syncErr) {
+        console.warn('Background recommendations sync:', syncErr);
+      }
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update profile');
     }
@@ -753,12 +864,22 @@ export default function ExerciseRoom() {
         address: "Location access denied or unavailable"
       };
 
+      const cached = getCachedHealthProfile();
+      const emContact = profileForm.emergencyContactEmail ? {
+        name: profileForm.emergencyContactName,
+        phone: profileForm.emergencyContactPhone,
+        email: profileForm.emergencyContactEmail,
+        relationship: profileForm.emergencyContactRelationship
+      } : (cached?.emergencyContact || user?.profile?.emergencyContact);
+
       const alertRes = await api.post('/alerts', {
         type: reason === 'user_absent' ? 'user_absent' : 'fall_detected',
         severity: 'critical',
         title,
         message,
         location: locationData,
+        emergencyContact: emContact,
+        emergencyEmail: emContact?.email,
         data: {
           exerciseName: selectedExercise?.name || 'Unknown Exercise',
           sessionStartTime: exerciseCounterRef.current?._startTime ? new Date(exerciseCounterRef.current._startTime).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
@@ -877,13 +998,22 @@ export default function ExerciseRoom() {
   const isCautionConfig = configuringExercise && recommendations?.recommendations?.caution?.some(c => c._id === configuringExercise._id);
   const isConfigLocked = configuringExercise && isLocked(configuringExercise._id);
 
+  const cachedProfile = getCachedHealthProfile();
+  const effectiveHeight = recommendations?.profile?.height || user?.profile?.height || cachedProfile?.height;
+  const effectiveWeight = recommendations?.profile?.weight || user?.profile?.weight || cachedProfile?.weight;
+  const effectiveAge = (recommendations?.profile?.age !== null && recommendations?.profile?.age !== undefined)
+    ? recommendations?.profile?.age
+    : (cachedProfile?.age || (user?.profile?.dateOfBirth ? Math.floor((Date.now() - new Date(user.profile.dateOfBirth).getTime()) / (1000 * 60 * 60 * 24 * 365.25)) : null));
+  const effectiveBmi = recommendations?.profile?.bmi || user?.profile?.bmi || user?.bmi || cachedProfile?.bmi || (effectiveHeight && effectiveWeight ? parseFloat((effectiveWeight / ((effectiveHeight / 100) ** 2)).toFixed(1)) : null);
+  const isMetricsMissing = !effectiveHeight || !effectiveWeight;
+
   return (
     <Layout>
       <div className="page-container">
         <h1 className="text-2xl font-bold mb-6">AI Exercise Room</h1>
 
         {!isActive ? (
-          recommendations && (!recommendations.profile.height || !recommendations.profile.weight || recommendations.profile.age === null) ? (
+          isMetricsMissing ? (
             <div className="flex flex-col items-center justify-center min-h-[50vh] text-center max-w-xl mx-auto py-12">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
@@ -925,14 +1055,14 @@ export default function ExerciseRoom() {
                       <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
                         Personalized Plan
                       </span>
-                      {recommendations.profile.isPregnant && (
+                      {(recommendations.profile?.isPregnant || user?.patientInfo?.isPregnant || cachedProfile?.isPregnant) && (
                         <span className="ml-2 bg-pink-500/20 text-pink-300 border border-pink-500/30 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider">
-                          🤰 Pregnant ({recommendations.profile.pregnancyWeeks} Weeks)
+                          🤰 Pregnant ({recommendations.profile?.pregnancyWeeks || user?.patientInfo?.pregnancyWeeks || cachedProfile?.pregnancyWeeks || 0} Weeks)
                         </span>
                       )}
                       <h2 className="text-xl font-bold mt-3 text-white">Your Health Profile Summary</h2>
                       <p className="text-gray-400 text-xs mt-1">
-                        {recommendations.profile.isPregnant 
+                        {(recommendations.profile?.isPregnant || user?.patientInfo?.isPregnant)
                           ? 'Exercises are customized for pregnancy health, safety guidelines, and active trimesters.' 
                           : 'Exercises are dynamically scored based on your body metrics and age group.'}
                       </p>
@@ -949,24 +1079,19 @@ export default function ExerciseRoom() {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6">
                     <div className="bg-white/5 rounded-2xl p-3 border border-white/5 flex flex-col justify-center">
                       <span className="text-[10px] text-gray-400 font-bold uppercase">Height</span>
-                      <span className="text-lg font-black text-white mt-1">{recommendations.profile.height ? `${recommendations.profile.height} cm` : 'N/A'}</span>
+                      <span className="text-lg font-black text-white mt-1">{effectiveHeight ? `${effectiveHeight} cm` : 'N/A'}</span>
                     </div>
                     <div className="bg-white/5 rounded-2xl p-3 border border-white/5 flex flex-col justify-center">
                       <span className="text-[10px] text-gray-400 font-bold uppercase">Weight</span>
-                      <span className="text-lg font-black text-white mt-1">{recommendations.profile.weight ? `${recommendations.profile.weight} kg` : 'N/A'}</span>
+                      <span className="text-lg font-black text-white mt-1">{effectiveWeight ? `${effectiveWeight} kg` : 'N/A'}</span>
                     </div>
                     <div className="bg-white/5 rounded-2xl p-3 border border-white/5 flex flex-col justify-center">
                       <span className="text-[10px] text-gray-400 font-bold uppercase">BMI Score</span>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-lg font-black text-white">{recommendations.profile.bmi || 'N/A'}</span>
-                        {recommendations.profile.bmiCategory && (
-                          <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold ${
-                            recommendations.profile.bmiCategory === 'Normal Weight' ? 'bg-green-500/20 text-green-300 border border-green-500/30' :
-                            recommendations.profile.bmiCategory === 'Underweight' ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' :
-                            recommendations.profile.bmiCategory === 'Overweight' ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' :
-                            'bg-red-500/20 text-red-300 border border-red-500/30'
-                          }`}>
-                            {recommendations.profile.bmiCategory}
+                        <span className="text-lg font-black text-white">{effectiveBmi || 'N/A'}</span>
+                        {(recommendations.profile?.bmiCategory || effectiveBmi) && (
+                          <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-green-500/20 text-green-300 border border-green-500/30">
+                            {recommendations.profile?.bmiCategory || 'Customized'}
                           </span>
                         )}
                       </div>
@@ -974,24 +1099,20 @@ export default function ExerciseRoom() {
                     <div className="bg-white/5 rounded-2xl p-3 border border-white/5 flex flex-col justify-center">
                       <span className="text-[10px] text-gray-400 font-bold uppercase">Age Group</span>
                       <div className="flex items-center gap-2 mt-1">
-                        <span className="text-lg font-black text-white">{recommendations.profile.age !== null ? `${recommendations.profile.age} yrs` : 'N/A'}</span>
-                        {recommendations.profile.ageCategory && (
-                          <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold ${
-                            recommendations.profile.ageCategory === 'Senior Citizen' ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' :
-                            recommendations.profile.ageCategory === 'Child' ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30' :
-                            'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-                          }`}>
-                            {recommendations.profile.ageCategory}
+                        <span className="text-lg font-black text-white">{effectiveAge !== null ? `${effectiveAge} yrs` : 'N/A'}</span>
+                        {(recommendations.profile?.ageCategory || effectiveAge) && (
+                          <span className="px-2 py-0.5 rounded-md text-[9px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                            {recommendations.profile?.ageCategory || 'Adult'}
                           </span>
                         )}
                       </div>
                     </div>
                   </div>
                   {/* Conditions & Injury Badges */}
-                  {recommendations.profile.conditions && recommendations.profile.conditions.length > 0 && (
+                  {((recommendations.profile?.conditions && recommendations.profile.conditions.length > 0) || (cachedProfile?.conditions && cachedProfile.conditions.length > 0)) && (
                     <div className="mt-4 flex flex-wrap gap-2 items-center border-t border-white/10 pt-3">
                       <span className="text-[10px] text-gray-400 font-bold uppercase tracking-wider">Active Injuries:</span>
-                      {recommendations.profile.conditions.map(cond => (
+                      {(recommendations.profile?.conditions || cachedProfile?.conditions || []).map(cond => (
                         <span key={cond} className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-red-500/20 text-red-300 border border-red-500/30 uppercase tracking-wide">
                           ⚠️ {cond.replace('_', ' ')}
                         </span>
@@ -1007,14 +1128,14 @@ export default function ExerciseRoom() {
                     <h3 className="font-extrabold text-sm uppercase tracking-wider text-amber-300">Safety & Joint Precautions</h3>
                   </div>
                   <p className="text-xs leading-relaxed font-medium text-amber-100/90 whitespace-pre-line">
-                    {recommendations.precautionText}
+                    {recommendations.precautionText || 'Perform all movements with controlled breathing and stable balance. Keep emergency contact configured.'}
                   </p>
                 </div>
               </motion.div>
             )}
 
             {/* Warning if metrics are missing */}
-            {recommendations && (!recommendations.profile.height || !recommendations.profile.weight || recommendations.profile.age === null) && (
+            {isMetricsMissing && (
               <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-3xl p-6 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
                 <div>
                   <h3 className="font-extrabold text-amber-950 text-base">⚠️ Missing Health Metrics</h3>
@@ -1813,6 +1934,54 @@ export default function ExerciseRoom() {
                       })}
                     </div>
                   </div>
+
+                  {/* Emergency Safety Contact for Camera Absence & Fall Detection */}
+                  <div className="border-t border-red-100 pt-3 mt-3 bg-red-50/60 p-3.5 rounded-2xl border border-red-200/80">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-lg">🚨</span>
+                      <div>
+                        <h4 className="text-xs font-black text-red-900 uppercase tracking-wide">Emergency Safety Contact</h4>
+                        <p className="text-[11px] text-red-700 font-medium">Auto-dispatches alerts with GPS location & OTP if you leave camera frame during exercise.</p>
+                      </div>
+                    </div>
+                    <div className="space-y-2.5">
+                      <div>
+                        <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">
+                          Contact Email <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          placeholder="caregiver@example.com"
+                          value={profileForm.emergencyContactEmail}
+                          onChange={(e) => setProfileForm(prev => ({ ...prev, emergencyContactEmail: e.target.value }))}
+                          className="w-full px-3 py-1.5 border border-red-200 bg-white rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-red-400 focus:border-transparent transition-all"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Contact Name</label>
+                          <input
+                            type="text"
+                            placeholder="e.g. John Doe"
+                            value={profileForm.emergencyContactName}
+                            onChange={(e) => setProfileForm(prev => ({ ...prev, emergencyContactName: e.target.value }))}
+                            className="w-full px-3 py-1.5 border border-gray-200 bg-white rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-1">Contact Phone</label>
+                          <input
+                            type="tel"
+                            placeholder="+91 9876543210"
+                            value={profileForm.emergencyContactPhone}
+                            onChange={(e) => setProfileForm(prev => ({ ...prev, emergencyContactPhone: e.target.value }))}
+                            className="w-full px-3 py-1.5 border border-gray-200 bg-white rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-primary-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex gap-3 pt-3">
@@ -2012,12 +2181,23 @@ export default function ExerciseRoom() {
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   <button
                     type="button"
-                    onClick={async () => {
+                    onClick={() => {
                       const token = localStorage.getItem('token');
                       const baseUrl = api.defaults.baseURL.startsWith('http')
                         ? api.defaults.baseURL
                         : `${window.location.origin}${api.defaults.baseURL}`;
-                      window.open(`${baseUrl}/exercises/session/${sessionId}/download-pdf?token=${token}`, '_blank');
+                      const params = new URLSearchParams({
+                        token: token || '',
+                        exerciseId: selectedExercise?._id || '',
+                        duration: workoutSummary?.duration || 0,
+                        reps: workoutSummary?.reps || 0,
+                        sets: workoutSummary?.sets || 1,
+                        accuracy: workoutSummary?.accuracy || 100,
+                        calories: workoutSummary?.calories || 0,
+                        corrections: workoutSummary?.postureCorrections || 0,
+                        preSugar: preExerciseSugar || localStorage.getItem('diafit_latest_sugar') || ''
+                      });
+                      window.open(`${baseUrl}/exercises/session/${sessionId || 'ses_recent'}/download-pdf?${params.toString()}`, '_blank');
                       toast.success('Downloading PDF report...');
                     }}
                     className="px-4 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-xl transition duration-200 flex items-center justify-center gap-1.5 w-full sm:w-auto shadow-sm"
@@ -2031,7 +2211,16 @@ export default function ExerciseRoom() {
                     onClick={async () => {
                       setEmailSending(true);
                       try {
-                        await api.post(`/exercises/session/${sessionId}/send-email`);
+                        await api.post(`/exercises/session/${sessionId || 'ses_recent'}/send-email`, {
+                          exerciseId: selectedExercise?._id,
+                          duration: workoutSummary?.duration,
+                          reps: workoutSummary?.reps,
+                          sets: workoutSummary?.sets,
+                          accuracy: workoutSummary?.accuracy,
+                          calories: workoutSummary?.calories,
+                          corrections: workoutSummary?.postureCorrections,
+                          preSugar: preExerciseSugar || localStorage.getItem('diafit_latest_sugar') || null
+                        });
                         toast.success('PDF report sent to your patient email!');
                       } catch (err) {
                         toast.error('Failed to send email report');

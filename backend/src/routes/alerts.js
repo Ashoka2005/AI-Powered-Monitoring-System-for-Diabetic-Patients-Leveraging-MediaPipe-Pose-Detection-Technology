@@ -21,15 +21,16 @@ router.post('/', protect, async (req, res) => {
       emergencyOtp = Math.floor(100000 + Math.random() * 900000).toString();
 
       // 1. Primary Personal Emergency Contact (Strictly and exclusively)
-      emergencyEmail = (contact?.email || user?.profile?.guardian?.email || user?.email || '').trim();
-      const emergencyName = contact?.name || user?.profile?.guardian?.name || (contact?.email ? 'Emergency Contact' : `${user?.firstName || 'Patient'} (Self)`);
-      const emergencyPhone = contact?.phone || user?.profile?.guardian?.phone || user?.phone || '';
+      const reqContact = req.body.emergencyContact || {};
+      emergencyEmail = (reqContact.email || req.body.emergencyEmail || contact?.email || user?.profile?.guardian?.email || user?.email || '').trim();
+      const emergencyName = reqContact.name || contact?.name || user?.profile?.guardian?.name || (contact?.email || reqContact.email ? 'Emergency Contact' : `${user?.firstName || 'Patient'} (Self)`);
+      const emergencyPhone = reqContact.phone || contact?.phone || user?.profile?.guardian?.phone || user?.phone || '';
 
       if (emergencyEmail) {
         recipients.push({
           email: emergencyEmail,
           name: emergencyName,
-          role: contact?.email ? 'Personal Emergency Contact' : 'Registered Patient Email (Emergency Contact Fallback)'
+          role: (contact?.email || reqContact.email) ? 'Personal Emergency Contact' : 'Registered Patient Email (Emergency Contact Fallback)'
         });
       }
 
