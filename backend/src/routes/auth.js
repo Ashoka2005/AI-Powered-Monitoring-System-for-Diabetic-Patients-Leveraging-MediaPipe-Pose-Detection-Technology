@@ -152,29 +152,36 @@ router.post(
       const token = user.generateToken();
       const refreshToken = user.generateRefreshToken();
       user.refreshToken = refreshToken;
-      await user.save();
-
-      // Dispatch real welcome email to user's registered inbox
       try {
-        await sendEmail({
-          to: normalizedEmail,
-          subject: '🎉 Welcome to DiaFit AI - Your Diabetic Rehabilitation Partner',
-          html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-              <h2 style="color: #2563eb; text-align: center; margin-bottom: 20px;">Welcome to DiaFit AI!</h2>
-              <p>Hello <strong>${firstName} ${lastName}</strong>,</p>
-              <p>Your DiaFit AI patient account has been created successfully. You can now access your personalized exercise coaching, real-time posture analysis, glycemic forecasting, and customized diabetic diet plans.</p>
-              <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin: 20px 0;">
-                <p style="margin: 0 0 8px 0;"><strong>Account Email:</strong> ${normalizedEmail}</p>
-                <p style="margin: 0 0 8px 0;"><strong>Role:</strong> ${role || 'Patient'}</p>
-                <p style="margin: 0;"><strong>Emergency Safety Contact:</strong> ${emergencyContactEmail || 'Configured'}</p>
+        await user.save();
+      } catch (saveErr) {
+        console.warn('User save warning (continuing with active token):', saveErr.message);
+      }
+
+      // Dispatch real welcome email to user's registered inbox (max 2.5s non-blocking race)
+      try {
+        await Promise.race([
+          sendEmail({
+            to: normalizedEmail,
+            subject: '🎉 Welcome to DiaFit AI - Your Diabetic Rehabilitation Partner',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+                <h2 style="color: #2563eb; text-align: center; margin-bottom: 20px;">Welcome to DiaFit AI!</h2>
+                <p>Hello <strong>${firstName} ${lastName}</strong>,</p>
+                <p>Your DiaFit AI patient account has been created successfully. You can now access your personalized exercise coaching, real-time posture analysis, glycemic forecasting, and customized diabetic diet plans.</p>
+                <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin: 20px 0;">
+                  <p style="margin: 0 0 8px 0;"><strong>Account Email:</strong> ${normalizedEmail}</p>
+                  <p style="margin: 0 0 8px 0;"><strong>Role:</strong> ${role || 'Patient'}</p>
+                  <p style="margin: 0;"><strong>Emergency Safety Contact:</strong> ${emergencyContactEmail || 'Configured'}</p>
+                </div>
+                <p>Get started by visiting the <strong>AI Exercise Room</strong> to begin your personalized exercises.</p>
+                <br/>
+                <p>Best regards,<br/><strong>DiaFit AI Healthcare Team</strong></p>
               </div>
-              <p>Get started by visiting the <strong>AI Exercise Room</strong> to begin your personalized exercises.</p>
-              <br/>
-              <p>Best regards,<br/><strong>DiaFit AI Healthcare Team</strong></p>
-            </div>
-          `
-        });
+            `
+          }),
+          new Promise((resolve) => setTimeout(resolve, 2500))
+        ]);
       } catch (err) {
         console.warn('Welcome email warning (non-blocking):', err.message);
       }
@@ -184,13 +191,27 @@ router.post(
       res.status(201).json({
         success: true,
         data: {
-          user: { id: user._id, firstName: user.firstName, lastName: user.lastName, email: user.email, role: user.role },
+          user: {
+            id: user._id,
+            _id: user._id,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            email: user.email,
+            role: user.role,
+            phone: user.phone || '',
+            profile: user.profile || {},
+            patientInfo: user.patientInfo || {}
+          },
           token,
           refreshToken,
         },
       });
     } catch (error) {
-      res.status(500).json({ success: false, message: error.message });
+      console.error('[Registration Error]:', error.message);
+      if (error.code === 11000) {
+        return res.status(409).json({ success: false, message: 'Email already registered. Please sign in.' });
+      }
+      res.status(500).json({ success: false, message: error.message || 'Registration failed' });
     }
   }
 );

@@ -38,6 +38,9 @@ const sendEmail = async ({ to, subject, html, attachments }) => {
               user: smtpUser,
               pass: cleanPass,
             },
+            connectionTimeout: 2500,
+            greetingTimeout: 2500,
+            socketTimeout: 3000,
           })
         : nodemailer.createTransport({
             host: process.env.SMTP_HOST || 'smtp.gmail.com',
@@ -47,18 +50,23 @@ const sendEmail = async ({ to, subject, html, attachments }) => {
               user: smtpUser,
               pass: cleanPass,
             },
-            connectionTimeout: 8000,
+            connectionTimeout: 2500,
+            greetingTimeout: 2500,
+            socketTimeout: 3000,
             tls: { rejectUnauthorized: false },
           });
 
       console.log(`[Email Service] Dispatching email to ${to} via ${isGmail ? 'Gmail Service' : 'Primary SMTP'}...`);
-      const info = await transporter.sendMail({
-        from: `"DiaFit AI Healthcare" <${process.env.EMAIL_FROM || smtpUser}>`,
-        to,
-        subject,
-        html,
-        attachments,
-      });
+      const info = await Promise.race([
+        transporter.sendMail({
+          from: `"DiaFit AI Healthcare" <${process.env.EMAIL_FROM || smtpUser}>`,
+          to,
+          subject,
+          html,
+          attachments,
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP sendMail timeout (3s)')), 3000))
+      ]);
       console.log('✓ [Email Service] Real email delivered successfully! MessageId:', info.messageId);
       return true;
     } catch (error) {
@@ -152,6 +160,9 @@ const sendEmail = async ({ to, subject, html, attachments }) => {
   }
 
   // 5. Ethereal Test Account Fallback (simulated delivery for offline/development)
+  if (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME) {
+    return false;
+  }
   try {
     const ethTrans = await getEtherealTransporter();
     if (ethTrans) {

@@ -22,9 +22,13 @@ export function AuthProvider({ children }) {
   const fetchUser = async () => {
     try {
       const res = await api.get('/users/me');
-      setUser(res.data.data);
-    } catch {
-      logout();
+      if (res.data?.data) {
+        setUser(res.data.data);
+      }
+    } catch (err) {
+      if (err.response?.status === 401) {
+        logout();
+      }
     } finally {
       setLoading(false);
     }
@@ -80,15 +84,16 @@ export function AuthProvider({ children }) {
   const register = async (data) => {
     try {
       const res = await api.post('/auth/register', data);
-      const { token: newToken, refreshToken } = res.data.data;
+      const { token: newToken, refreshToken, user: newUser } = res.data.data;
       localStorage.setItem('token', newToken);
       localStorage.setItem('refreshToken', refreshToken);
+      setUser(newUser);
       setToken(newToken);
-      setUser(res.data.data.user);
       toast.success('Account created successfully!');
       return res.data.data;
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Registration failed');
+      const msg = error.response?.data?.message || error.response?.data?.errors?.[0]?.message || 'Registration failed';
+      toast.error(msg);
       throw error;
     }
   };

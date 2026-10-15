@@ -6,7 +6,16 @@ const router = express.Router();
 // Get current user profile
 router.get('/me', protect, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate('patientInfo.doctorId', 'firstName lastName email doctorInfo');
+    let user = null;
+    try {
+      user = await User.findById(req.user._id).populate('patientInfo.doctorId', 'firstName lastName email doctorInfo');
+    } catch (e) {}
+
+    // Fall back to verified user on req.user
+    if (!user) {
+      user = req.user;
+    }
+
     res.json({ success: true, data: user });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

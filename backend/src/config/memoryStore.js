@@ -358,7 +358,17 @@ function makeDocInstance(data) {
     },
     generateToken: function () {
       return jwt.sign(
-        { id: this._id, role: this.role || 'patient' },
+        {
+          id: this._id,
+          _id: this._id,
+          role: this.role || 'patient',
+          email: this.email,
+          firstName: this.firstName,
+          lastName: this.lastName,
+          phone: this.phone || '',
+          profile: this.profile || {},
+          patientInfo: this.patientInfo || {}
+        },
         getJwtSecret(),
         { expiresIn: process.env.JWT_EXPIRE || '7d' }
       );
@@ -874,5 +884,6 @@ module.exports = {
   healthRecords,
   exerciseSessions,
   initModelFallbacks,
-  seedInitialUsers
+  seedInitialUsers,
+  makeDocInstance
 };

@@ -16,8 +16,8 @@ const connectDB = async () => {
       const sanitizedUri = uri.replace(/:([^:@]+)@/, ':****@');
       console.log(`[Database] Attempting connection to MongoDB (${sanitizedUri})...`);
       const conn = await mongoose.connect(uri, {
-        serverSelectionTimeoutMS: 3000,
-        connectTimeoutMS: 3000
+        serverSelectionTimeoutMS: 1500,
+        connectTimeoutMS: 1500
       });
       console.log(`✓ [Database] Connected to MongoDB: ${conn.connection.host}`);
       connected = true;

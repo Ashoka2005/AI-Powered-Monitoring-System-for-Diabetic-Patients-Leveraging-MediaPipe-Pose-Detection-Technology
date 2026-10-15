@@ -91,7 +91,17 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 // Generate JWT
 userSchema.methods.generateToken = function () {
   return jwt.sign(
-    { id: this._id, role: this.role },
+    {
+      id: this._id,
+      _id: this._id,
+      role: this.role || 'patient',
+      email: this.email,
+      firstName: this.firstName,
+      lastName: this.lastName,
+      phone: this.phone || '',
+      profile: this.profile || {},
+      patientInfo: this.patientInfo || {}
+    },
     process.env.JWT_SECRET || 'diafit-ai-dev-secret-key-2024-change-in-production',
     { expiresIn: process.env.JWT_EXPIRE || '7d' }
   );
