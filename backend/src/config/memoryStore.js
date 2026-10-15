@@ -537,7 +537,12 @@ function initModelFallbacks() {
     const origUserCreate = User.create;
     User.create = async function (data) {
       if (mongoose.connection.readyState === 1) {
-        return origUserCreate.apply(this, arguments);
+        try {
+          return await origUserCreate.apply(this, arguments);
+        } catch (dbErr) {
+          if (dbErr.code === 11000) throw dbErr;
+          console.warn('⚠️ [User.create DB write failed, falling back to in-memory store]:', dbErr.message);
+        }
       }
       let password = data.password || 'password123';
       if (!password.startsWith('$2a$') && !password.startsWith('$2b$')) {

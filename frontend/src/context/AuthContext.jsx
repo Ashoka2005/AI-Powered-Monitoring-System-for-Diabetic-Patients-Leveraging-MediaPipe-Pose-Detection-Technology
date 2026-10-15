@@ -92,8 +92,16 @@ export function AuthProvider({ children }) {
       toast.success('Account created successfully!');
       return res.data.data;
     } catch (error) {
-      const msg = error.response?.data?.message || error.response?.data?.errors?.[0]?.message || 'Registration failed';
-      toast.error(msg);
+      console.error('[Auth Registration Error]:', error);
+      let msg = error.response?.data?.message || error.response?.data?.errors?.[0]?.message;
+      if (!msg) {
+        if (error.message === 'Network Error') {
+          msg = 'Unable to reach backend server. Please verify your connection or refresh the page.';
+        } else {
+          msg = error.message || 'Registration failed. Please check your credentials.';
+        }
+      }
+      toast.error(msg, { duration: 6000 });
       throw error;
     }
   };

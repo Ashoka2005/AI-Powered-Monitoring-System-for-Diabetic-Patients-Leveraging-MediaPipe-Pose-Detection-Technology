@@ -56,13 +56,16 @@ if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   app.use(morgan('dev'));
 }
 
-// Rate limiting (Relaxed for clinical monitoring)
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 1000,
-  message: { success: false, message: 'Too many requests, please try again later.' }
-});
-app.use('/api/', limiter);
+// Rate limiting (Relaxed for clinical monitoring, skipped on serverless to prevent proxy validation exceptions)
+if (!process.env.VERCEL) {
+  const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 1000,
+    validate: false,
+    message: { success: false, message: 'Too many requests, please try again later.' }
+  });
+  app.use('/api/', limiter);
+}
 
 // Static files (uploads)
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
@@ -115,9 +118,10 @@ app.get(['/diafit-ai.apk', '/download/apk'], (req, res) => {
   return res.status(404).send('APK is currently building. Please wait a moment and refresh.');
 });
 
-// Mount Routes with both /api/v1 and /api prefixes for full Vercel rewrite compatibility
+// Mount Routes with /api/v1, /v1, /api, and clean prefixes for full Vercel rewrite compatibility
 const mountRoute = (prefix, router) => {
   app.use(`/api/v1/${prefix}`, router);
+  app.use(`/v1/${prefix}`, router);
   app.use(`/api/${prefix}`, router);
   app.use(`/${prefix}`, router);
 };

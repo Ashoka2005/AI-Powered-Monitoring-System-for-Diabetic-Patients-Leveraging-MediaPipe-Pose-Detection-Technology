@@ -180,7 +180,7 @@ router.post(
               </div>
             `
           }),
-          new Promise((resolve) => setTimeout(resolve, 2500))
+          new Promise((resolve) => setTimeout(resolve, 600))
         ]);
       } catch (err) {
         console.warn('Welcome email warning (non-blocking):', err.message);

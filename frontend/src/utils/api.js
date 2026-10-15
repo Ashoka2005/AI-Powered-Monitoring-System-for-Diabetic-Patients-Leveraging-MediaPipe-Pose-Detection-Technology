@@ -18,22 +18,30 @@ export const setServerIp = (ip) => {
 export const getServerBase = () => {
   if (typeof window === 'undefined') return '/api/v1';
 
-  // 1. Explicit Environment Variable (e.g. deployed backend URL configured in Vercel)
+  // 1. Cloud / Vercel Web Deployment (Always use relative /api/v1 on public domains to avoid Mixed Content / CORS errors)
+  const isCloudHost = window.location.hostname && (
+    window.location.hostname.endsWith('.vercel.app') || 
+    window.location.hostname.includes('.render.com') || 
+    window.location.hostname.includes('.railway.app') ||
+    (window.location.protocol === 'https:' && !window.location.hostname.includes('localhost'))
+  );
+
+  if (isCloudHost) {
+    if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.startsWith('https://')) {
+      return import.meta.env.VITE_API_URL;
+    }
+    return '/api/v1';
+  }
+
+  // 2. Explicit Environment Variable
   if (import.meta.env.VITE_API_URL && import.meta.env.VITE_API_URL.startsWith('http')) {
     return import.meta.env.VITE_API_URL;
   }
   
-  // 2. Custom Server IP saved in localStorage (for mobile LAN testing)
+  // 3. Custom Server IP saved in localStorage (for mobile LAN testing only)
   const customIp = localStorage.getItem('diafit_server_ip');
-  if (customIp && customIp.trim()) return `http://${customIp.trim()}:5000/api/v1`;
-
-  // 3. Cloud / Vercel Web Deployment (Do NOT append :5000 to public domains)
-  if (window.location.hostname && (
-    window.location.hostname.endsWith('.vercel.app') || 
-    window.location.hostname.includes('.render.com') || 
-    window.location.hostname.includes('.railway.app')
-  )) {
-    return import.meta.env.VITE_API_URL || '/api/v1';
+  if (customIp && customIp.trim() && window.location.protocol !== 'https:') {
+    return `http://${customIp.trim()}:5000/api/v1`;
   }
 
   // 4. Native Android APK / Capacitor / File URL environment:
