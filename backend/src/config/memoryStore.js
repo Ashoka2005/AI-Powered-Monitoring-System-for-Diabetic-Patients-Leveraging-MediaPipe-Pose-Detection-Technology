@@ -278,6 +278,7 @@ const exercises = [
 const alerts = [];
 const healthRecords = [];
 const exerciseSessions = [];
+const chatMessages = [];
 
 function getJwtSecret() {
   return process.env.JWT_SECRET || 'diafit-ai-dev-secret-key-2024-change-in-production';
@@ -821,19 +822,25 @@ function initModelFallbacks() {
       const DietPlan = require('../models/DietPlan');
       const dietPlans = [];
 
+      const origDietUpdateMany = DietPlan.updateMany;
       DietPlan.updateMany = function (query, update) {
-        if (mongoose.connection.readyState === 1) {
-          return DietPlan.prototype.constructor.updateMany?.apply(this, arguments) || makeQueryPromise({ acknowledged: true });
+        if (mongoose.connection.readyState === 1 && origDietUpdateMany) {
+          try {
+            return origDietUpdateMany.apply(this, arguments);
+          } catch (e) {}
         }
         dietPlans.forEach(p => {
-          if (update.isActive !== undefined) p.isActive = update.isActive;
+          if (update && update.isActive !== undefined) p.isActive = update.isActive;
         });
         return makeQueryPromise({ acknowledged: true, modifiedCount: dietPlans.length });
       };
 
+      const origDietCreate = DietPlan.create;
       DietPlan.create = async function (data) {
-        if (mongoose.connection.readyState === 1) {
-          return DietPlan.prototype.constructor.create?.apply(this, arguments);
+        if (mongoose.connection.readyState === 1 && origDietCreate) {
+          try {
+            return await origDietCreate.apply(this, arguments);
+          } catch (e) {}
         }
         const doc = {
           _id: 'diet_' + Math.random().toString(36).substring(2, 10),
@@ -845,17 +852,23 @@ function initModelFallbacks() {
         return doc;
       };
 
+      const origDietFindOne = DietPlan.findOne;
       DietPlan.findOne = function (query) {
-        if (mongoose.connection.readyState === 1) {
-          return DietPlan.prototype.constructor.findOne?.apply(this, arguments);
+        if (mongoose.connection.readyState === 1 && origDietFindOne) {
+          try {
+            return origDietFindOne.apply(this, arguments);
+          } catch (e) {}
         }
         const found = dietPlans.find(p => p.isActive) || dietPlans[0] || null;
         return makeQueryPromise(found);
       };
 
+      const origDietFind = DietPlan.find;
       DietPlan.find = function (query) {
-        if (mongoose.connection.readyState === 1) {
-          return DietPlan.prototype.constructor.find?.apply(this, arguments);
+        if (mongoose.connection.readyState === 1 && origDietFind) {
+          try {
+            return origDietFind.apply(this, arguments);
+          } catch (e) {}
         }
         return makeQueryPromise(dietPlans);
       };
@@ -866,12 +879,84 @@ function initModelFallbacks() {
     // 8. Appointment & ChatMessage Fallbacks
     try {
       const Appointment = require('../models/Appointment');
-      Appointment.find = Appointment.find || function () { return makeQueryPromise([]); };
-      Appointment.countDocuments = Appointment.countDocuments || function () { return makeQueryPromise(0); };
+      const origAppointmentFind = Appointment.find;
+      Appointment.find = function (query) {
+        if (mongoose.connection.readyState === 1 && origAppointmentFind) {
+          try {
+            return origAppointmentFind.apply(this, arguments);
+          } catch (e) {}
+        }
+        return makeQueryPromise([]);
+      };
+
+      const origAppointmentCount = Appointment.countDocuments;
+      Appointment.countDocuments = function (query) {
+        if (mongoose.connection.readyState === 1 && origAppointmentCount) {
+          try {
+            return origAppointmentCount.apply(this, arguments);
+          } catch (e) {}
+        }
+        return makeQueryPromise(0);
+      };
 
       const ChatMessage = require('../models/ChatMessage');
-      ChatMessage.find = ChatMessage.find || function () { return makeQueryPromise([]); };
-      ChatMessage.create = ChatMessage.create || async function (d) { return { _id: 'msg_1', ...d }; };
+      const origChatMessageCreate = ChatMessage.create;
+      ChatMessage.create = async function (data) {
+        if (mongoose.connection.readyState === 1) {
+          try {
+            return await origChatMessageCreate.apply(this, arguments);
+          } catch (e) {}
+        }
+        const doc = {
+          _id: 'msg_' + Math.random().toString(36).substring(2, 9),
+          ...data,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        chatMessages.push(doc);
+        return doc;
+      };
+
+      const origChatMessageFind = ChatMessage.find;
+      ChatMessage.find = function (query) {
+        if (mongoose.connection.readyState === 1) {
+          try {
+            return origChatMessageFind.apply(this, arguments);
+          } catch (e) {}
+        }
+        let list = [...chatMessages];
+        if (query) {
+          if (query.userId) {
+            list = list.filter(m => (m.userId || '').toString() === query.userId.toString());
+          }
+          if (query.sessionId) {
+            list = list.filter(m => m.sessionId === query.sessionId);
+          }
+        }
+        return makeQueryPromise(list);
+      };
+
+      const origChatMessageAggregate = ChatMessage.aggregate;
+      ChatMessage.aggregate = async function (pipeline) {
+        if (mongoose.connection.readyState === 1) {
+          try {
+            return await origChatMessageAggregate.apply(this, arguments);
+          } catch (e) {}
+        }
+        // Basic session grouping fallback
+        const sessionMap = new Map();
+        for (const m of chatMessages) {
+          if (m.sessionId) {
+            sessionMap.set(m.sessionId, {
+              _id: m.sessionId,
+              lastMessage: m.content,
+              lastDate: m.createdAt,
+              messageCount: (sessionMap.get(m.sessionId)?.messageCount || 0) + 1
+            });
+          }
+        }
+        return Array.from(sessionMap.values());
+      };
     } catch (acErr) {}
 
     console.log('✓ [Data Layer] In-memory model fallbacks initialized successfully.');
@@ -888,6 +973,7 @@ module.exports = {
   alerts,
   healthRecords,
   exerciseSessions,
+  chatMessages,
   initModelFallbacks,
   seedInitialUsers,
   makeDocInstance

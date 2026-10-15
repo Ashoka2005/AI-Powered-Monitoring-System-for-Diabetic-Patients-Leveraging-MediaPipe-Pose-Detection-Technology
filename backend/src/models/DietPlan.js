@@ -2,9 +2,9 @@ const mongoose = require('mongoose');
 
 const dietPlanSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    userId: { type: mongoose.Schema.Types.Mixed, ref: 'User', required: true },
     generatedBy: { type: String, enum: ['ai', 'doctor', 'manual'], default: 'ai' },
-    doctorId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    doctorId: { type: mongoose.Schema.Types.Mixed, ref: 'User' },
     title: { type: String, required: true },
     description: { type: String },
     totalCalories: { type: Number },

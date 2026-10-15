@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 const alertSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+    userId: { type: mongoose.Schema.Types.Mixed, ref: 'User', required: true },
     type: {
       type: String,
       required: true,
@@ -13,7 +13,7 @@ const alertSchema = new mongoose.Schema(
     message: { type: String, required: true },
     data: { type: mongoose.Schema.Types.Mixed },
     acknowledged: { type: Boolean, default: false },
-    acknowledgedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    acknowledgedBy: { type: mongoose.Schema.Types.Mixed, ref: 'User' },
     acknowledgedAt: { type: Date },
     notifiedContacts: [{ name: String, phone: String, email: String, notifiedAt: Date, method: String }],
     location: { latitude: Number, longitude: Number, address: String },

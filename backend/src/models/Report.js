@@ -2,8 +2,8 @@ const mongoose = require('mongoose');
 
 const reportSchema = new mongoose.Schema(
   {
-    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    generatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    userId: { type: mongoose.Schema.Types.Mixed, ref: 'User', required: true },
+    generatedBy: { type: mongoose.Schema.Types.Mixed, ref: 'User' },
     type: {
       type: String,
       enum: ['health_summary', 'exercise_report', 'blood_sugar_trends', 'diet_compliance', 'comprehensive', 'doctor_notes'],

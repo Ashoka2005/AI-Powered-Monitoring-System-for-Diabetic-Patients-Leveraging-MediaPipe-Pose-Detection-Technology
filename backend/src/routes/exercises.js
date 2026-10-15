@@ -31,7 +31,7 @@ router.get('/', optionalAuth, async (req, res) => {
 });
 
 // Get exercise recommendations based on user BMI and age (Public / Optional Auth)
-router.get('/recommendations', optionalAuth, async (req, res) => {
+router.get(['/recommendations', '/recommended'], optionalAuth, async (req, res) => {
   try {
     let user = req.user;
     if (!user && req.user?._id) {

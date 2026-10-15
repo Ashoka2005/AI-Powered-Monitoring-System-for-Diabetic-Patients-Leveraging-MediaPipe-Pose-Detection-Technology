@@ -5,29 +5,43 @@ const axios = require('axios');
 const router = express.Router();
 
 // Generate AI diet recommendation
-router.post('/recommend', protect, async (req, res) => {
+router.post(['/recommend', '/recommendations'], protect, async (req, res) => {
   try {
     const User = require('../models/User');
-    const user = await User.findById(req.user._id);
-
-    let aiPlan;
+    let user = null;
     try {
-      const response = await axios.post(`${process.env.ML_SERVICE_URL}/recommend/diet`, {
-        age: user.profile?.dateOfBirth ? new Date().getFullYear() - new Date(user.profile.dateOfBirth).getFullYear() : 45,
-        gender: user.profile?.gender || 'male',
-        weight: user.profile?.weight || 70,
-        height: user.profile?.height || 170,
-        bmi: user.bmi || 25,
-        diabetesType: user.patientInfo?.diabetesType || 'type2',
-        conditions: user.patientInfo?.conditions || [],
-        allergies: user.patientInfo?.allergies || [],
-        isPregnant: user.patientInfo?.isPregnant === true,
-        pregnancyWeeks: user.patientInfo?.pregnancyWeeks || 0,
-        preferences: req.body.preferences || {},
-      });
-      aiPlan = response.data;
-    } catch (mlError) {
-      // Fallback diet plan
+      user = await User.findById(req.user._id);
+    } catch (e) {
+      user = null;
+    }
+    user = user || req.user || {};
+
+    let aiPlan = null;
+    const mlUrl = process.env.ML_SERVICE_URL;
+    const isRemoteML = mlUrl && !mlUrl.includes('localhost') && !mlUrl.includes('127.0.0.1') && !process.env.VERCEL;
+
+    if (isRemoteML) {
+      try {
+        const response = await axios.post(`${mlUrl}/recommend/diet`, {
+          age: user.profile?.dateOfBirth ? new Date().getFullYear() - new Date(user.profile.dateOfBirth).getFullYear() : 45,
+          gender: user.profile?.gender || 'male',
+          weight: user.profile?.weight || 70,
+          height: user.profile?.height || 170,
+          bmi: user.bmi || 25,
+          diabetesType: user.patientInfo?.diabetesType || 'type2',
+          conditions: user.patientInfo?.conditions || [],
+          allergies: user.patientInfo?.allergies || [],
+          isPregnant: user.patientInfo?.isPregnant === true,
+          pregnancyWeeks: user.patientInfo?.pregnancyWeeks || 0,
+          preferences: req.body?.preferences || {},
+        }, { timeout: 1500 });
+        aiPlan = response.data;
+      } catch (mlError) {
+        aiPlan = null;
+      }
+    }
+
+    if (!aiPlan) {
       aiPlan = {
         title: 'Diabetic-Friendly Meal Plan',
         description: 'AI-generated meal plan optimized for blood sugar control',
@@ -113,8 +127,8 @@ router.post('/recommend', protect, async (req, res) => {
   }
 });
 
-// Get active diet plan
-router.get('/active', protect, async (req, res) => {
+// Get active diet plan (or fallback recommendation)
+router.get(['/active', '/recommendations', '/recommend'], protect, async (req, res) => {
   try {
     let plan = await DietPlan.findOne({ userId: req.user._id, isActive: true }).sort({ createdAt: -1 });
     if (!plan) {
