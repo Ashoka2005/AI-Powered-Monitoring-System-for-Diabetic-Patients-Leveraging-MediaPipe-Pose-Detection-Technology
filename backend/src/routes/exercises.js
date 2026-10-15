@@ -1,12 +1,12 @@
 const express = require('express');
-const { protect } = require('../middleware/auth');
+const { protect, optionalAuth } = require('../middleware/auth');
 const Exercise = require('../models/Exercise');
 const ExerciseSession = require('../models/ExerciseSession');
 const User = require('../models/User');
 const router = express.Router();
 
-// Get all exercises
-router.get('/', protect, async (req, res) => {
+// Get all exercises (Public / Optional Auth)
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const { category, difficulty, diabetes } = req.query;
     const filter = { isActive: true };
@@ -14,26 +14,35 @@ router.get('/', protect, async (req, res) => {
     if (difficulty) filter.difficulty = difficulty;
     if (diabetes === 'true') filter.isDiabetesRecommended = true;
 
-    const exercises = await Exercise.find(filter).sort({ name: 1 });
-    res.json({ success: true, data: exercises });
+    let exercises = await Exercise.find(filter).sort({ name: 1 });
+    if (!exercises || exercises.length === 0) {
+      const { exercises: memoryExercises } = require('../config/memoryStore');
+      exercises = memoryExercises.filter(e => {
+        if (category && e.category !== category) return false;
+        if (difficulty && e.difficulty !== difficulty) return false;
+        if (diabetes === 'true' && !e.isDiabetesRecommended) return false;
+        return true;
+      });
+    }
+    res.json({ success: true, count: exercises.length, data: exercises });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// Get exercise recommendations based on user BMI and age
-router.get('/recommendations', protect, async (req, res) => {
+// Get exercise recommendations based on user BMI and age (Public / Optional Auth)
+router.get('/recommendations', optionalAuth, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
+    let user = req.user;
+    if (!user && req.user?._id) {
+      user = await User.findById(req.user._id);
     }
 
     // 1. Calculate age from dateOfBirth or query/profile
     let age = null;
     let ageCategory = 'adult'; // 'child', 'adult', 'senior'
     let ageCategoryLabel = 'Adult';
-    if (user.profile && user.profile.dateOfBirth) {
+    if (user?.profile && user.profile.dateOfBirth) {
       const birthDate = new Date(user.profile.dateOfBirth);
       const today = new Date();
       age = today.getFullYear() - birthDate.getFullYear();
@@ -41,8 +50,10 @@ router.get('/recommendations', protect, async (req, res) => {
       if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
         age--;
       }
-    } else if (user.profile?.age || req.query.age) {
-      age = parseInt(user.profile?.age || req.query.age) || 30;
+    } else if (user?.profile?.age || req.query.age) {
+      age = parseInt(user?.profile?.age || req.query.age) || 30;
+    } else {
+      age = 30;
     }
 
     if (age !== null) {
@@ -59,13 +70,14 @@ router.get('/recommendations', protect, async (req, res) => {
     }
 
     // 2. Fetch or calculate BMI from height/weight
-    const userHeight = user.profile?.height || (req.query.height ? parseFloat(req.query.height) : null);
-    const userWeight = user.profile?.weight || (req.query.weight ? parseFloat(req.query.weight) : null);
-    let bmi = user.bmi;
+    const userHeight = user?.profile?.height || (req.query.height ? parseFloat(req.query.height) : 172);
+    const userWeight = user?.profile?.weight || (req.query.weight ? parseFloat(req.query.weight) : 68);
+    let bmi = user?.bmi;
     if (!bmi && userHeight && userWeight) {
       const heightM = userHeight / 100;
       bmi = parseFloat((userWeight / (heightM * heightM)).toFixed(1));
     }
+    if (!bmi) bmi = 23.0;
 
     let bmiCategory = 'normal'; // 'underweight', 'normal', 'overweight', 'obese'
     let bmiCategoryLabel = 'Normal Weight';
@@ -86,11 +98,16 @@ router.get('/recommendations', protect, async (req, res) => {
     }
 
     // 3. Check pregnancy status
-    const isPregnant = user.patientInfo?.isPregnant === true;
-    const pregnancyWeeks = user.patientInfo?.pregnancyWeeks || 0;
+    const isPregnant = (user?.patientInfo?.isPregnant === true) || req.query.isPregnant === 'true';
+    const pregnancyWeeks = user?.patientInfo?.pregnancyWeeks || parseInt(req.query.pregnancyWeeks) || 0;
 
     // Check conditions/injuries
-    const conditions = user.patientInfo?.conditions || [];
+    let conditions = user?.patientInfo?.conditions || [];
+    if (req.query.conditions) {
+      conditions = Array.isArray(req.query.conditions)
+        ? req.query.conditions
+        : req.query.conditions.split(',').map(c => c.trim());
+    }
     const hasKneePain = conditions.includes('knee_pain');
     const hasShoulderPain = conditions.includes('shoulder_pain');
     const hasBackPain = conditions.includes('back_pain');
@@ -142,7 +159,11 @@ router.get('/recommendations', protect, async (req, res) => {
     }
 
     // 5. Get active exercises and filter them into Primary, Secondary, Caution lists
-    const exercises = await Exercise.find({ isActive: true });
+    let exercises = await Exercise.find({ isActive: true });
+    if (!exercises || exercises.length === 0) {
+      const { exercises: memoryExercises } = require('../config/memoryStore');
+      exercises = memoryExercises;
+    }
     
     const primary = [];
     const secondary = [];
@@ -265,7 +286,7 @@ router.get('/recommendations', protect, async (req, res) => {
           bmiCategory: bmiCategoryLabel,
           age: age,
           ageCategory: ageCategoryLabel,
-          gender: user.profile?.gender || null,
+          gender: user?.profile?.gender || req.query.gender || 'unspecified',
           isPregnant: isPregnant,
           pregnancyWeeks: pregnancyWeeks,
           conditions: conditions,
@@ -283,10 +304,21 @@ router.get('/recommendations', protect, async (req, res) => {
   }
 });
 
-// Get single exercise
-router.get('/:id', protect, async (req, res) => {
+// Get single exercise (Public / Optional Auth)
+router.get('/:id', optionalAuth, async (req, res) => {
   try {
-    const exercise = await Exercise.findById(req.params.id);
+    let exercise = null;
+    const mongoose = require('mongoose');
+    if (mongoose.Types.ObjectId.isValid(req.params.id)) {
+      exercise = await Exercise.findById(req.params.id);
+    }
+    if (!exercise) {
+      exercise = await Exercise.findOne({ slug: req.params.id });
+    }
+    if (!exercise) {
+      const { exercises: memoryExercises } = require('../config/memoryStore');
+      exercise = memoryExercises.find(e => e._id === req.params.id || e.slug === req.params.id);
+    }
     if (!exercise) return res.status(404).json({ success: false, message: 'Exercise not found' });
     res.json({ success: true, data: exercise });
   } catch (error) {
@@ -297,15 +329,30 @@ router.get('/:id', protect, async (req, res) => {
 // Start exercise session
 router.post('/session/start', protect, async (req, res) => {
   try {
-    const { exerciseId, preExerciseSugar } = req.body;
-    const exercise = await Exercise.findById(exerciseId);
-    if (!exercise) return res.status(404).json({ success: false, message: 'Exercise not found' });
+    const { exerciseId, preExerciseSugar, exerciseName } = req.body;
+    
+    let exercise = null;
+    const mongoose = require('mongoose');
+    if (exerciseId && mongoose.Types.ObjectId.isValid(exerciseId)) {
+      exercise = await Exercise.findById(exerciseId);
+    }
+    if (!exercise && exerciseId) {
+      exercise = await Exercise.findOne({ slug: exerciseId });
+    }
+    if (!exercise && exerciseId) {
+      const { exercises: memoryExercises } = require('../config/memoryStore');
+      exercise = memoryExercises.find(e => e._id === exerciseId || e.slug === exerciseId);
+    }
+
+    const resolvedExId = exercise?._id || exerciseId || 'ex_1';
+    const resolvedExName = exerciseName || exercise?.name || 'Physical Workout';
 
     const session = await ExerciseSession.create({
       userId: req.user._id,
-      exerciseId,
+      exerciseId: resolvedExId,
+      exerciseName: resolvedExName,
       startTime: new Date(),
-      glycemicImpact: { preExerciseSugar },
+      glycemicImpact: { preExerciseSugar: preExerciseSugar ? parseFloat(preExerciseSugar) : undefined },
     });
 
     res.status(201).json({ success: true, data: session });
@@ -315,33 +362,85 @@ router.post('/session/start', protect, async (req, res) => {
 });
 
 // End exercise session
+// End exercise session
 router.put('/session/:sessionId/end', protect, async (req, res) => {
   try {
-    const { repsCompleted, setsCompleted, accuracyScore, caloriesBurned, avgJointAngles, postureCorrections, feedback, fallDetected, postExerciseSugar } = req.body;
+    const {
+      exerciseId,
+      exerciseName,
+      duration,
+      repsCompleted,
+      setsCompleted,
+      accuracyScore,
+      caloriesBurned,
+      avgJointAngles,
+      postureCorrections,
+      feedback,
+      fallDetected,
+      postExerciseSugar
+    } = req.body;
 
-    const session = await ExerciseSession.findById(req.params.sessionId);
-    if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
-    if (session.userId.toString() !== req.user._id.toString()) return res.status(403).json({ success: false, message: 'Not authorized' });
+    let session = await ExerciseSession.findById(req.params.sessionId);
+    if (!session) {
+      session = await ExerciseSession.findOne({ userId: req.user._id }).sort({ createdAt: -1 });
+    }
+    
+    // If session not found (stateless serverless instances on Vercel), recreate safely
+    if (!session || session.userId.toString() !== req.user._id.toString()) {
+      session = await ExerciseSession.create({
+        _id: req.params.sessionId && req.params.sessionId.startsWith('ses_') ? req.params.sessionId : undefined,
+        userId: req.user._id,
+        exerciseId: exerciseId || 'ex_1',
+        exerciseName: exerciseName || 'Physical Workout',
+        startTime: new Date(Date.now() - (parseInt(duration) || 300) * 1000),
+        endTime: new Date(),
+        completed: true
+      });
+    }
 
     session.endTime = new Date();
-    session.duration = Math.floor((session.endTime - session.startTime) / 1000);
-    session.repsCompleted = repsCompleted || 0;
-    session.setsCompleted = setsCompleted || 0;
-    session.accuracyScore = accuracyScore || 0;
-    session.caloriesBurned = caloriesBurned || 0;
-    session.avgJointAngles = avgJointAngles || {};
-    session.postureCorrections = postureCorrections || 0;
-    session.feedback = feedback || [];
+    session.duration = parseInt(duration) || (session.startTime ? Math.floor((session.endTime - session.startTime) / 1000) : 300);
+    session.repsCompleted = parseInt(repsCompleted) || session.repsCompleted || 0;
+    session.setsCompleted = parseInt(setsCompleted) || session.setsCompleted || 1;
+    session.accuracyScore = parseInt(accuracyScore) || session.accuracyScore || 90;
+    session.caloriesBurned = parseInt(caloriesBurned) || session.caloriesBurned || 25;
+    session.avgJointAngles = avgJointAngles || session.avgJointAngles || {};
+    session.postureCorrections = parseInt(postureCorrections) || session.postureCorrections || 0;
+    session.feedback = feedback || session.feedback || [];
     session.fallDetected = fallDetected || false;
     session.completed = true;
 
+    // Resolve accurate exercise name
+    const Exercise = require('../models/Exercise');
+    let exercise = null;
+    const lookupId = exerciseId || session.exerciseId;
+    if (lookupId) {
+      try {
+        const mongoose = require('mongoose');
+        if (mongoose.Types.ObjectId.isValid(lookupId)) {
+          exercise = await Exercise.findById(lookupId);
+        }
+        if (!exercise) {
+          exercise = await Exercise.findOne({ slug: lookupId });
+        }
+      } catch (e) {}
+    }
+    if (!exercise) {
+      const { exercises: memoryExercises } = require('../config/memoryStore');
+      exercise = memoryExercises.find(e => e._id === lookupId || e.slug === lookupId);
+    }
+    const finalExName = exerciseName || exercise?.name || session.exerciseName || 'Physical Workout';
+    session.exerciseName = finalExName;
+    if (exercise && !session.exerciseId) session.exerciseId = exercise._id;
+
     if (postExerciseSugar) {
-      session.glycemicImpact.postExerciseSugar = postExerciseSugar;
+      session.glycemicImpact = session.glycemicImpact || {};
+      session.glycemicImpact.postExerciseSugar = parseFloat(postExerciseSugar);
       if (session.glycemicImpact.preExerciseSugar) {
         const { calculateGlycemicImpact } = require('../utils/glycemicScore');
         session.glycemicImpact.impactScore = calculateGlycemicImpact(
           session.glycemicImpact.preExerciseSugar,
-          postExerciseSugar,
+          parseFloat(postExerciseSugar),
           session.duration
         );
       }
@@ -351,18 +450,20 @@ router.put('/session/:sessionId/end', protect, async (req, res) => {
     
     // 1. Generate the diet plan recommendation synchronously
     const { generateAndSendWorkoutReport, getDietRecommendation } = require('../utils/pdfReport');
-    const Exercise = require('../models/Exercise');
-    const exercise = await Exercise.findById(session.exerciseId);
     let dietPlan = null;
     try {
-      dietPlan = await getDietRecommendation(req.user, session, exercise?.name || 'Unknown Exercise');
+      dietPlan = await getDietRecommendation(req.user, session, finalExName);
     } catch (dietErr) {
       console.error('Failed to pre-generate diet plan:', dietErr.message);
     }
 
-    // 2. Asynchronously generate the 2-page PDF report (including diet plan) and email it
-    generateAndSendWorkoutReport(session, req.user, dietPlan)
-      .catch(err => console.error('Failed to generate and email PDF report:', err));
+    // 2. Dispatch workout email and PDF report before response to guarantee delivery in serverless environments
+    try {
+      await generateAndSendWorkoutReport(session, req.user, dietPlan);
+      console.log('✓ Workout report successfully dispatched to patient email.');
+    } catch (emailErr) {
+      console.warn('⚠️ Workout report email warning (non-blocking):', emailErr.message);
+    }
 
     res.json({ success: true, data: session, dietPlan });
   } catch (error) {
@@ -384,33 +485,67 @@ router.post('/session/:sessionId/end-beacon', async (req, res) => {
 
     let bodyData = req.body;
     if (typeof bodyData === 'string') {
-      bodyData = JSON.parse(bodyData);
+      try {
+        bodyData = JSON.parse(bodyData);
+      } catch(e) {
+        bodyData = {};
+      }
     }
 
-    const { repsCompleted, setsCompleted, accuracyScore, caloriesBurned, avgJointAngles, postureCorrections, feedback, fallDetected, postExerciseSugar } = bodyData;
+    const {
+      exerciseId,
+      exerciseName,
+      duration,
+      repsCompleted,
+      setsCompleted,
+      accuracyScore,
+      caloriesBurned,
+      avgJointAngles,
+      postureCorrections,
+      feedback,
+      fallDetected,
+      postExerciseSugar
+    } = bodyData || {};
 
-    const session = await ExerciseSession.findById(req.params.sessionId);
-    if (!session) return res.status(404).json({ success: false, message: 'Session not found' });
+    let session = await ExerciseSession.findById(req.params.sessionId);
+    if (!session) {
+      session = await ExerciseSession.findOne({ userId: user._id }).sort({ createdAt: -1 });
+    }
+    if (!session) {
+      session = await ExerciseSession.create({
+        _id: req.params.sessionId && req.params.sessionId.startsWith('ses_') ? req.params.sessionId : undefined,
+        userId: user._id,
+        exerciseId: exerciseId || 'ex_1',
+        exerciseName: exerciseName || 'Physical Workout',
+        startTime: new Date(Date.now() - (parseInt(duration) || 300) * 1000),
+        endTime: new Date(),
+        completed: true
+      });
+    }
 
     session.endTime = new Date();
-    session.duration = Math.floor((session.endTime - session.startTime) / 1000);
-    session.repsCompleted = repsCompleted || 0;
-    session.setsCompleted = setsCompleted || 0;
-    session.accuracyScore = accuracyScore || 0;
-    session.caloriesBurned = caloriesBurned || 0;
-    session.avgJointAngles = avgJointAngles || {};
-    session.postureCorrections = postureCorrections || 0;
-    session.feedback = feedback || [];
+    session.duration = parseInt(duration) || (session.startTime ? Math.floor((session.endTime - session.startTime) / 1000) : 300);
+    session.repsCompleted = parseInt(repsCompleted) || session.repsCompleted || 0;
+    session.setsCompleted = parseInt(setsCompleted) || session.setsCompleted || 1;
+    session.accuracyScore = parseInt(accuracyScore) || session.accuracyScore || 90;
+    session.caloriesBurned = parseInt(caloriesBurned) || session.caloriesBurned || 25;
+    session.avgJointAngles = avgJointAngles || session.avgJointAngles || {};
+    session.postureCorrections = parseInt(postureCorrections) || session.postureCorrections || 0;
+    session.feedback = feedback || session.feedback || [];
     session.fallDetected = fallDetected || false;
     session.completed = true;
 
+    const finalExName = exerciseName || session.exerciseName || 'Physical Workout';
+    session.exerciseName = finalExName;
+
     if (postExerciseSugar) {
-      session.glycemicImpact.postExerciseSugar = postExerciseSugar;
+      session.glycemicImpact = session.glycemicImpact || {};
+      session.glycemicImpact.postExerciseSugar = parseFloat(postExerciseSugar);
       if (session.glycemicImpact.preExerciseSugar) {
         const { calculateGlycemicImpact } = require('../utils/glycemicScore');
         session.glycemicImpact.impactScore = calculateGlycemicImpact(
           session.glycemicImpact.preExerciseSugar,
-          postExerciseSugar,
+          parseFloat(postExerciseSugar),
           session.duration
         );
       }
@@ -418,20 +553,19 @@ router.post('/session/:sessionId/end-beacon', async (req, res) => {
 
     await session.save();
 
-    // 1. Generate the diet plan recommendation synchronously
     const { generateAndSendWorkoutReport, getDietRecommendation } = require('../utils/pdfReport');
-    const Exercise = require('../models/Exercise');
-    const exercise = await Exercise.findById(session.exerciseId);
     let dietPlan = null;
     try {
-      dietPlan = await getDietRecommendation(user, session, exercise?.name || 'Unknown Exercise');
+      dietPlan = await getDietRecommendation(user, session, finalExName);
     } catch (dietErr) {
       console.error('Failed to pre-generate diet plan:', dietErr.message);
     }
 
-    // 2. Asynchronously generate the 2-page PDF report and email it
-    generateAndSendWorkoutReport(session, user, dietPlan)
-      .catch(err => console.error('Failed to generate and email PDF report:', err));
+    try {
+      await generateAndSendWorkoutReport(session, user, dietPlan);
+    } catch (emailErr) {
+      console.warn('⚠️ Beacon email dispatch warning (non-blocking):', emailErr.message);
+    }
 
     res.json({ success: true, data: session, dietPlan });
   } catch (error) {

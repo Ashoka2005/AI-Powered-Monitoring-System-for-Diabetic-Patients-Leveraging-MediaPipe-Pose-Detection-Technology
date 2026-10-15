@@ -154,6 +154,31 @@ router.post(
       user.refreshToken = refreshToken;
       await user.save();
 
+      // Dispatch real welcome email to user's registered inbox
+      try {
+        await sendEmail({
+          to: normalizedEmail,
+          subject: '🎉 Welcome to DiaFit AI - Your Diabetic Rehabilitation Partner',
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+              <h2 style="color: #2563eb; text-align: center; margin-bottom: 20px;">Welcome to DiaFit AI!</h2>
+              <p>Hello <strong>${firstName} ${lastName}</strong>,</p>
+              <p>Your DiaFit AI patient account has been created successfully. You can now access your personalized exercise coaching, real-time posture analysis, glycemic forecasting, and customized diabetic diet plans.</p>
+              <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; border: 1px solid #e2e8f0; margin: 20px 0;">
+                <p style="margin: 0 0 8px 0;"><strong>Account Email:</strong> ${normalizedEmail}</p>
+                <p style="margin: 0 0 8px 0;"><strong>Role:</strong> ${role || 'Patient'}</p>
+                <p style="margin: 0;"><strong>Emergency Safety Contact:</strong> ${emergencyContactEmail || 'Configured'}</p>
+              </div>
+              <p>Get started by visiting the <strong>AI Exercise Room</strong> to begin your personalized exercises.</p>
+              <br/>
+              <p>Best regards,<br/><strong>DiaFit AI Healthcare Team</strong></p>
+            </div>
+          `
+        });
+      } catch (err) {
+        console.warn('Welcome email warning (non-blocking):', err.message);
+      }
+
       res.cookie('token', token, { httpOnly: true, secure: process.env.NODE_ENV === 'production', maxAge: 7 * 24 * 60 * 60 * 1000 });
 
       res.status(201).json({

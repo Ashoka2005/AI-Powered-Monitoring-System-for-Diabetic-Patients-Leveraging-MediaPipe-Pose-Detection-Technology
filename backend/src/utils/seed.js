@@ -207,6 +207,66 @@ const exercises = [
       angleThresholds: { minAngle: 100, maxAngle: 165 }
     },
     thumbnail: '/images/exercises/walking-place.png'
+  },
+  {
+    name: 'Prenatal Yoga',
+    slug: 'prenatal-yoga',
+    description: 'Gentle restorative yoga postures to maintain pelvic mobility, reduce stress, and improve breathing.',
+    category: 'flexibility',
+    difficulty: 'beginner',
+    targetReps: 10,
+    targetSets: 2,
+    caloriesPerMinute: 3,
+    isDiabetesRecommended: true,
+    instructions: ['Begin in a comfortable seated position', 'Perform gentle side reaches and cat-cow breathing', 'Hold each stretch for 3 deep breaths'],
+    precautions: ['Do not overstretch', 'Avoid lying flat on back after first trimester'],
+    landmarks: { primaryJoints: ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'], angleThresholds: { minAngle: 30, maxAngle: 150 } },
+    thumbnail: '/images/exercises/prenatal-yoga.png'
+  },
+  {
+    name: 'Kegel Pelvic Floor Exercises',
+    slug: 'kegels',
+    description: 'Targeted pelvic floor muscle contractions to strengthen pelvic support and circulation during pregnancy.',
+    category: 'core',
+    difficulty: 'beginner',
+    targetReps: 15,
+    targetSets: 3,
+    caloriesPerMinute: 2,
+    isDiabetesRecommended: true,
+    instructions: ['Contract pelvic floor muscles', 'Hold for 5 seconds', 'Release gently for 5 seconds', 'Repeat rhythmically'],
+    precautions: ['Do not hold your breath while contracting', 'Relax completely between contractions'],
+    landmarks: { primaryJoints: ['left_hip', 'right_hip'], angleThresholds: { minAngle: 0, maxAngle: 90 } },
+    thumbnail: '/images/exercises/kegels.png'
+  },
+  {
+    name: 'Gentle Stretching',
+    slug: 'gentle-stretching',
+    description: 'Safe, low-intensity stretching for back, hips, and calves to alleviate muscle cramps and joint tightness.',
+    category: 'flexibility',
+    difficulty: 'beginner',
+    targetReps: 10,
+    targetSets: 2,
+    caloriesPerMinute: 2,
+    isDiabetesRecommended: true,
+    instructions: ['Extend arms forward slowly', 'Gently reach toward sides within comfort', 'Hold stretches for 10-15 seconds'],
+    precautions: ['Stop immediately if you feel sharp pain or dizziness'],
+    landmarks: { primaryJoints: ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'], angleThresholds: { minAngle: 30, maxAngle: 120 } },
+    thumbnail: '/images/exercises/gentle-stretching.png'
+  },
+  {
+    name: 'Stationary Cycling',
+    slug: 'stationary-cycling',
+    description: 'Low-impact cardiovascular exercise on a stationary bike to lower blood glucose safely.',
+    category: 'cardio',
+    difficulty: 'beginner',
+    targetReps: 20,
+    targetSets: 3,
+    caloriesPerMinute: 6,
+    isDiabetesRecommended: true,
+    instructions: ['Adjust seat to hip height', 'Pedal at a smooth, moderate pace', 'Keep handlebars comfortably within reach'],
+    precautions: ['Stay well hydrated', 'Do not exceed moderate exertion level'],
+    landmarks: { primaryJoints: ['left_hip', 'left_knee', 'right_hip', 'right_knee'], angleThresholds: { minAngle: 60, maxAngle: 150 } },
+    thumbnail: '/images/exercises/stationary-cycling.png'
   }
 ];
 
@@ -226,17 +286,24 @@ const seedDatabase = async () => {
     }
 
     // Clear existing data
-    await User.deleteMany({});
     await Exercise.deleteMany({});
-    await HealthRecord.deleteMany({});
-    await ExerciseSession.deleteMany({});
-    console.log('Cleared existing data');
+    console.log('Cleared existing exercises');
 
     // Create exercises
     await Exercise.insertMany(exercises);
     console.log(`${exercises.length} exercises created`);
 
-    console.log('\n--- Seed Complete (Exercises Only) ---');
+    // Seed default users if none exist
+    const { defaultAccounts } = require('../config/memoryStore');
+    const userCount = await User.countDocuments();
+    if (userCount === 0 && defaultAccounts) {
+      for (const acc of defaultAccounts) {
+        await User.create(acc);
+      }
+      console.log('Default demo accounts created');
+    }
+
+    console.log('\n--- Seed Complete ---');
     process.exit(0);
   } catch (error) {
     console.error('Seed error:', error);

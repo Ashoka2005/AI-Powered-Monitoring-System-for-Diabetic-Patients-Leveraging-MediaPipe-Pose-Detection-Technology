@@ -77,6 +77,27 @@ app.get(['/api/health', '/health'], (req, res) => {
   });
 });
 
+// API overview
+app.get(['/api', '/api/v1'], (req, res) => {
+  res.json({
+    success: true,
+    message: 'DiaFit AI Backend API is operational',
+    version: '1.0.0',
+    endpoints: {
+      allExercises: '/api/v1/exercises',
+      recommendedExercises: '/api/v1/exercises/recommendations',
+      auth: '/api/v1/auth',
+      health: '/api/health'
+    }
+  });
+});
+
+// Direct aliases to recommended exercises
+app.get(['/recommendations', '/recommended-exercises', '/api/recommendations', '/api/v1/recommendations'], (req, res) => {
+  res.redirect('/api/v1/exercises/recommendations');
+});
+
+
 // Direct Android APK download route
 app.get(['/diafit-ai.apk', '/download/apk'], (req, res) => {
   const apkPaths = [

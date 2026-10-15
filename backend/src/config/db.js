@@ -30,8 +30,8 @@ const connectDB = async () => {
   const isServerless = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
   if (!connected && !isServerless) {
     try {
-      console.log('[Database] Checking local In-Memory MongoDB engine...');
-      const { MongoMemoryServer } = require('mongodb-memory-server');
+      const mmsPkg = 'mongodb-memory-server';
+      const { MongoMemoryServer } = require(mmsPkg);
       mongoServer = await MongoMemoryServer.create();
       const memUri = mongoServer.getUri();
       const conn = await mongoose.connect(memUri);
@@ -42,13 +42,47 @@ const connectDB = async () => {
     }
   }
 
-  // 3. Fallback to resilient in-memory store
-  if (!connected) {
+  // 3. Fallback to resilient in-memory store or seed database
+  if (connected) {
+    await seedDatabaseIfNeeded();
+  } else {
     seedInitialUsers();
     console.log(`✓ [Database] Running with zero-latency in-memory datastore. All auth, OTP, and monitoring features active.`);
   }
 
   return connected;
 };
+
+async function seedDatabaseIfNeeded() {
+  try {
+    const Exercise = require('../models/Exercise');
+    const User = require('../models/User');
+    const { exercises, defaultAccounts } = require('./memoryStore');
+
+    const exCount = await Exercise.countDocuments();
+    if (exCount === 0) {
+      console.log(`[Database] Auto-seeding ${exercises.length} exercises into database...`);
+      for (const ex of exercises) {
+        const item = { ...ex };
+        delete item._id;
+        await Exercise.updateOne({ slug: item.slug }, { $set: item }, { upsert: true });
+      }
+      console.log(`✓ [Database] Exercises auto-seeded successfully.`);
+    }
+
+    const userCount = await User.countDocuments();
+    if (userCount === 0) {
+      console.log(`[Database] Auto-seeding default accounts into database...`);
+      for (const acc of defaultAccounts) {
+        const item = { ...acc };
+        delete item._id;
+        await User.create(item);
+      }
+      console.log(`✓ [Database] Default accounts auto-seeded successfully.`);
+    }
+  } catch (err) {
+    console.warn(`[Database Seed Warning]:`, err.message);
+  }
+}
 
 module.exports = connectDB;

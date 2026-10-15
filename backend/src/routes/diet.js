@@ -116,8 +116,11 @@ router.post('/recommend', protect, async (req, res) => {
 // Get active diet plan
 router.get('/active', protect, async (req, res) => {
   try {
-    const plan = await DietPlan.findOne({ userId: req.user._id, isActive: true }).sort({ createdAt: -1 });
-    if (!plan) return res.status(404).json({ success: false, message: 'No active diet plan found' });
+    let plan = await DietPlan.findOne({ userId: req.user._id, isActive: true }).sort({ createdAt: -1 });
+    if (!plan) {
+      const { getDietRecommendation } = require('../utils/pdfReport');
+      plan = await getDietRecommendation(req.user, {}, 'Daily Glucose Balance');
+    }
     res.json({ success: true, data: plan });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

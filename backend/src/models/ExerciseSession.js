@@ -3,7 +3,8 @@ const mongoose = require('mongoose');
 const exerciseSessionSchema = new mongoose.Schema(
   {
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-    exerciseId: { type: mongoose.Schema.Types.ObjectId, ref: 'Exercise', required: true },
+    exerciseId: { type: mongoose.Schema.Types.Mixed, ref: 'Exercise' },
+    exerciseName: { type: String, default: 'Physical Workout' },
     startTime: { type: Date, required: true },
     endTime: { type: Date },
     duration: { type: Number }, // seconds
@@ -23,7 +24,7 @@ const exerciseSessionSchema = new mongoose.Schema(
       impactScore: { type: Number },
     },
   },
-  { timestamps: true }
+  { timestamps: true, strict: false }
 );
 
 exerciseSessionSchema.index({ userId: 1, createdAt: -1 });

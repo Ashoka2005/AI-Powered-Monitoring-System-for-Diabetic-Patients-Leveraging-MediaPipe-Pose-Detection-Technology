@@ -9,110 +9,188 @@ const getDietRecommendation = async (user, session, exerciseName) => {
   const DietPlan = require('../models/DietPlan');
   const axios = require('axios');
   
-  let aiPlan;
-  try {
-    const age = user.profile?.dateOfBirth 
-      ? new Date().getFullYear() - new Date(user.profile.dateOfBirth).getFullYear() 
-      : 45;
-      
-    const response = await axios.post(`${process.env.ML_SERVICE_URL}/recommend/diet`, {
-      age,
-      gender: user.profile?.gender || 'male',
-      weight: user.profile?.weight || 70,
-      height: user.profile?.height || 170,
-      bmi: user.bmi || 25,
-      diabetesType: user.patientInfo?.diabetesType || 'type2',
-      conditions: user.patientInfo?.conditions || [],
-      allergies: user.patientInfo?.allergies || [],
-      isPregnant: user.patientInfo?.isPregnant === true,
-      pregnancyWeeks: user.patientInfo?.pregnancyWeeks || 0,
-      preferences: {
-        lastWorkout: exerciseName,
-        caloriesBurned: session.caloriesBurned
-      },
-    });
-    aiPlan = response.data;
-  } catch (mlError) {
-    // Fallback diet plan
+  const safeUser = user || {};
+  const safeSession = session || {};
+  const exName = exerciseName || safeSession.exerciseName || 'Diabetic Exercise';
+
+  let aiPlan = null;
+
+  // Try calling external ML microservice if configured (and not localhost in serverless Vercel)
+  if (process.env.ML_SERVICE_URL && (!process.env.VERCEL || !process.env.ML_SERVICE_URL.includes('localhost'))) {
+    try {
+      const age = safeUser.profile?.dateOfBirth 
+        ? new Date().getFullYear() - new Date(safeUser.profile.dateOfBirth).getFullYear() 
+        : (safeUser.profile?.age || 45);
+        
+      const response = await axios.post(`${process.env.ML_SERVICE_URL}/recommend/diet`, {
+        age,
+        gender: safeUser.profile?.gender || 'male',
+        weight: safeUser.profile?.weight || 70,
+        height: safeUser.profile?.height || 170,
+        bmi: safeUser.bmi || 24,
+        diabetesType: safeUser.patientInfo?.diabetesType || 'type2',
+        conditions: safeUser.patientInfo?.conditions || [],
+        allergies: safeUser.patientInfo?.allergies || [],
+        isPregnant: safeUser.patientInfo?.isPregnant === true,
+        pregnancyWeeks: safeUser.patientInfo?.pregnancyWeeks || 0,
+        preferences: {
+          lastWorkout: exName,
+          caloriesBurned: safeSession.caloriesBurned || 30
+        },
+      }, { timeout: 2500 });
+      aiPlan = response.data;
+    } catch (mlError) {
+      console.log('[Diet AI] Microservice skipped/timed out, using clinical diet engine.');
+    }
+  }
+
+  // Clinical Diabetic Nutrition Generator (Fast, resilient, tailored to exercise & health metrics)
+  if (!aiPlan) {
+    const isPregnant = safeUser.patientInfo?.isPregnant === true;
+    const pregnancyWeeks = safeUser.patientInfo?.pregnancyWeeks || 0;
+    const caloriesBurned = safeSession.caloriesBurned || 30;
+
+    let totalCalories = 1750;
+    let totalCarbs = 160;
+    let totalProtein = 95;
+    let totalFat = 55;
+    let planTitle = `Diabetic Recovery Nutrition (${exName})`;
+    let planDescription = `Clinical post-exercise nutrition designed to replenish muscle glycogen, stabilize glycemic spikes, and accelerate recovery after ${exName}.`;
+
+    if (isPregnant) {
+      planTitle = `Prenatal Gestational Diet (Week ${pregnancyWeeks || 16})`;
+      planDescription = `Nutrient-dense maternal nutrition supporting fetal development, iron/folate absorption, and post-${exName} blood sugar control.`;
+      totalCalories = 2050;
+      totalCarbs = 185;
+      totalProtein = 110;
+      totalFat = 65;
+    } else if (safeUser.bmi && safeUser.bmi >= 28) {
+      planTitle = `Low-Glycemic Weight & Glucose Plan (${exName})`;
+      planDescription = `Low-glycemic meal plan designed to promote fat loss while shielding lean muscle and preserving steady glucose levels.`;
+      totalCalories = 1600;
+      totalCarbs = 140;
+      totalProtein = 100;
+      totalFat = 50;
+    }
+
     aiPlan = {
-      title: 'Diabetic-Friendly Meal Plan',
-      description: 'AI-generated meal plan optimized for blood sugar control',
-      totalCalories: 1800,
-      totalCarbs: 180,
-      totalProtein: 90,
-      totalFat: 60,
-      glycemicLoad: 85,
+      title: planTitle,
+      description: planDescription,
+      totalCalories,
+      totalCarbs,
+      totalProtein,
+      totalFat,
+      glycemicLoad: isPregnant ? 70 : 65,
       meals: [
         {
-          name: 'Breakfast',
-          time: '08:00',
-          calories: 400,
-          carbs: 40,
-          protein: 25,
-          fat: 12,
-          glycemicIndex: 45,
+          name: 'Post-Workout Recovery Snack',
+          time: 'Within 45m after workout',
+          calories: Math.min(220, Math.max(160, Math.round(caloriesBurned * 1.5 + 80))),
+          carbs: 18,
+          protein: 16,
+          fat: 6,
+          glycemicIndex: 32,
           items: [
-            { name: 'Oatmeal with berries', quantity: '1 cup', calories: 250 },
-            { name: 'Boiled eggs', quantity: '2', calories: 140 },
-          ],
+            { name: 'Greek yogurt (unsweetened) with chia seeds', quantity: '150g', calories: 120 },
+            { name: 'Fresh blueberries or crushed walnuts', quantity: '1/4 cup', calories: 60 }
+          ]
         },
         {
-          name: 'Lunch',
-          time: '13:00',
-          calories: 550,
-          carbs: 55,
-          protein: 30,
-          fat: 18,
-          glycemicIndex: 42,
+          name: 'Energizing Diabetic Breakfast',
+          time: '08:00 AM',
+          calories: 420,
+          carbs: 42,
+          protein: 26,
+          fat: 14,
+          glycemicIndex: 40,
           items: [
-            { name: 'Grilled chicken salad', quantity: '1 bowl', calories: 350 },
-            { name: 'Quinoa', quantity: '1/2 cup', calories: 200 },
-          ],
+            { name: 'Steel-cut oats with cinnamon (blunts glucose spike)', quantity: '1 cup cooked', calories: 180 },
+            { name: 'Boiled eggs or tofu scramble', quantity: '2 eggs', calories: 140 },
+            { name: 'Spinach and sautéed mushrooms', quantity: '1/2 cup', calories: 45 },
+            { name: 'Almonds or soaked walnuts', quantity: '5-6 nuts', calories: 55 }
+          ]
         },
         {
-          name: 'Snack',
-          time: '16:00',
-          calories: 200,
-          carbs: 20,
-          protein: 10,
-          fat: 8,
-          glycemicIndex: 30,
-          items: [
-            { name: 'Mixed nuts', quantity: '30g', calories: 180 },
-            { name: 'Apple', quantity: '1 small', calories: 80 },
-          ],
-        },
-        {
-          name: 'Dinner',
-          time: '19:00',
-          calories: 500,
-          carbs: 45,
-          protein: 35,
-          fat: 15,
+          name: 'High-Fiber Balanced Lunch',
+          time: '01:00 PM',
+          calories: 520,
+          carbs: 50,
+          protein: 34,
+          fat: 16,
           glycemicIndex: 38,
           items: [
-            { name: 'Baked salmon', quantity: '150g', calories: 300 },
-            { name: 'Steamed vegetables', quantity: '1 cup', calories: 100 },
-            { name: 'Brown rice', quantity: '1/2 cup', calories: 110 },
-          ],
+            { name: 'Grilled herb chicken breast or paneer/chana', quantity: '140g', calories: 230 },
+            { name: 'Quinoa or brown basmati rice', quantity: '1/2 cup', calories: 120 },
+            { name: 'Mixed bell pepper, cucumber, & olive oil salad', quantity: '1 large bowl', calories: 120 },
+            { name: 'Spiced lentil soup (Dal)', quantity: '1 small bowl', calories: 50 }
+          ]
         },
+        {
+          name: 'Afternoon Metabolic Snack',
+          time: '04:30 PM',
+          calories: 160,
+          carbs: 16,
+          protein: 8,
+          fat: 7,
+          glycemicIndex: 28,
+          items: [
+            { name: 'Roasted chickpeas (Chana) or edamame', quantity: '35g', calories: 110 },
+            { name: 'Green tea or infused lemon water', quantity: '1 cup', calories: 5 },
+            { name: 'Cucumber or carrot sticks', quantity: '1 cup', calories: 45 }
+          ]
+        },
+        {
+          name: 'Low-Carb Restorative Dinner',
+          time: '07:30 PM',
+          calories: 440,
+          carbs: 38,
+          protein: 32,
+          fat: 13,
+          glycemicIndex: 35,
+          items: [
+            { name: 'Steamed salmon fillet, baked fish, or grilled tofu', quantity: '150g', calories: 240 },
+            { name: 'Steamed broccoli, zucchini, and cauliflower', quantity: '1.5 cups', calories: 90 },
+            { name: 'Small baked sweet potato or multi-grain roti', quantity: '1 piece', calories: 110 }
+          ]
+        }
       ],
-      restrictions: ['Limit refined sugars', 'Avoid white bread', 'Limit fruit juices'],
-      recommendations: ['Eat at regular intervals', 'Stay hydrated', 'Include fiber-rich foods', 'Monitor portion sizes'],
+      restrictions: [
+        'Avoid sugar-sweetened drinks, sodas, and packaged fruit juices',
+        'Limit refined flour (white bread, pasta, pastries)',
+        'Avoid deep-fried snacks, trans fats, and palm oil',
+        'Do not skip meals — consistency prevents reactive hypoglycemia'
+      ],
+      recommendations: [
+        `Consume your post-workout recovery snack within 45 minutes of ${exName}`,
+        'Eat vegetables and protein first before carbohydrates to reduce blood sugar spikes by up to 40%',
+        'Drink at least 2.5 to 3 liters of water throughout the day for kidney filtration',
+        'Check blood sugar 2 hours after your main meal to track individual glycemic responses',
+        'Include anti-inflammatory herbs like cinnamon, fenugreek, and turmeric'
+      ]
     };
   }
 
-  // Deactivate old plans
-  await DietPlan.updateMany({ userId: user._id, isActive: true }, { isActive: false });
+  // Deactivate old plans for this user if available
+  try {
+    if (safeUser._id) {
+      await DietPlan.updateMany({ userId: safeUser._id, isActive: true }, { isActive: false });
+    }
+  } catch (e) {}
 
   // Create new active plan
-  const plan = await DietPlan.create({
-    userId: user._id,
-    generatedBy: 'ai',
-    ...aiPlan,
-    validFrom: new Date(),
-    validTo: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-  });
+  let plan = null;
+  try {
+    plan = await DietPlan.create({
+      userId: safeUser._id || 'guest',
+      generatedBy: 'ai',
+      ...aiPlan,
+      validFrom: new Date(),
+      validTo: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      isActive: true
+    });
+  } catch (err) {
+    plan = { ...aiPlan, _id: 'diet_' + Date.now(), createdAt: new Date() };
+  }
 
   return plan;
 };
@@ -126,30 +204,47 @@ const generateWorkoutReportPDF = async (session, user, dietPlan) => {
     try {
       const safeUser = user || {};
       const safeSession = session || {};
-      const Exercise = require('../models/Exercise');
-      let exercise = null;
-      try {
-        if (safeSession.exerciseId) {
-          exercise = await Exercise.findById(safeSession.exerciseId);
-        }
-      } catch (e) {}
       
+      // Accurately resolve exercise name
+      let exerciseName = safeSession.exerciseName || '';
+      if (!exerciseName && safeSession.exerciseId) {
+        try {
+          const Exercise = require('../models/Exercise');
+          const mongoose = require('mongoose');
+          let ex = null;
+          if (typeof safeSession.exerciseId === 'string' && mongoose.Types.ObjectId.isValid(safeSession.exerciseId)) {
+            ex = await Exercise.findById(safeSession.exerciseId);
+          }
+          if (!ex) {
+            ex = await Exercise.findOne({ slug: safeSession.exerciseId });
+          }
+          if (ex && ex.name) exerciseName = ex.name;
+        } catch (e) {}
+      }
+      if (!exerciseName) {
+        const { exercises: memoryExercises } = require('../config/memoryStore');
+        const ex = memoryExercises.find(e => e._id === safeSession.exerciseId || e.slug === safeSession.exerciseId);
+        if (ex && ex.name) exerciseName = ex.name;
+      }
+      if (!exerciseName) exerciseName = 'Physical Workout';
+      safeSession.exerciseName = exerciseName;
+
       // 1. Get or generate the AI Diet Plan Recommendation
       let activeDietPlan = dietPlan;
       if (!activeDietPlan) {
         try {
-          activeDietPlan = await getDietRecommendation(safeUser, safeSession, exercise?.name || 'Workout Exercise');
+          activeDietPlan = await getDietRecommendation(safeUser, safeSession, exerciseName);
         } catch (e) {
           activeDietPlan = {
-            title: 'Diabetic-Friendly Meal Plan',
-            description: 'AI-generated diet tailored for post-workout glycemic control.',
-            totalCalories: 1800,
-            totalCarbs: 180,
-            totalProtein: 90,
-            totalFat: 60,
+            title: 'Diabetic-Friendly Recovery Plan',
+            description: 'Clinical diet tailored for post-workout glycemic control.',
+            totalCalories: 1750,
+            totalCarbs: 160,
+            totalProtein: 95,
+            totalFat: 55,
             meals: [],
-            restrictions: ['Limit refined sugars', 'Avoid white bread'],
-            recommendations: ['Eat at regular intervals', 'Stay hydrated']
+            restrictions: ['Limit refined sugars', 'Avoid white bread', 'Stay hydrated'],
+            recommendations: ['Eat at regular intervals', 'Prioritize fiber-rich vegetables']
           };
         }
       }
@@ -257,7 +352,7 @@ const generateWorkoutReportPDF = async (session, user, dietPlan) => {
       const accScore = typeof safeSession.accuracyScore === 'number' ? safeSession.accuracyScore : 95;
       const accuracyColor = accScore >= 80 ? '#15803d' : accScore >= 60 ? '#b45309' : '#b91c1c';
 
-      drawRow(275, 'Exercise Completed', exercise?.name || 'Physical Workout');
+      drawRow(275, 'Exercise Completed', exerciseName || 'Physical Workout');
       drawRow(300, 'Workout Duration', durationFormatted);
       drawRow(325, 'Total Repetitions Done', `${safeSession.repsCompleted || 0} reps (${safeSession.setsCompleted || 1} sets)`);
       drawRow(350, 'Form Performance Accuracy', `${accScore}%`, true, accuracyColor);
@@ -434,10 +529,8 @@ const generateWorkoutReportPDF = async (session, user, dietPlan) => {
 const generateAndSendWorkoutReport = async (session, user, dietPlan) => {
   try {
     const { pdfBuffer, activeDietPlan } = await generateWorkoutReportPDF(session, user, dietPlan);
-    const Exercise = require('../models/Exercise');
-    const exercise = await Exercise.findById(session.exerciseId);
-
-    const formattedDuration = `${Math.floor(session.duration / 60)}m ${session.duration % 60}s`;
+    const finalExName = session.exerciseName || 'Physical Workout';
+    const formattedDuration = `${Math.floor((session.duration || 300) / 60)}m ${(session.duration || 300) % 60}s`;
     const glycemicImpactText = session.glycemicImpact?.impactScore 
       ? `${session.glycemicImpact.impactScore.toFixed(1)} / 10`
       : 'N/A';
@@ -445,13 +538,13 @@ const generateAndSendWorkoutReport = async (session, user, dietPlan) => {
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 25px; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
         <h2 style="color: #2563eb; text-align: center; margin-bottom: 20px;">🏋️ Workout Session Completed!</h2>
-        <p>Hello <strong>${user.firstName} ${user.lastName}</strong>,</p>
+        <p>Hello <strong>${user.firstName || 'Patient'} ${user.lastName || ''}</strong>,</p>
         <p>Congratulations on completing your exercise session! Here is a summary of your performance and nutrition report. We have attached a detailed PDF report containing your workout metrics and customized meal plan.</p>
         
         <table style="width: 100%; border-collapse: collapse; margin-top: 20px; margin-bottom: 20px;">
           <tr style="background-color: #f8fafc;">
             <td style="padding: 12px; border: 1px solid #e2e8f0; font-weight: bold; width: 45%;">Exercise Name</td>
-            <td style="padding: 12px; border: 1px solid #e2e8f0;">${exercise?.name || 'Unknown Exercise'}</td>
+            <td style="padding: 12px; border: 1px solid #e2e8f0; font-weight: bold; color: #1e3a8a;">${finalExName}</td>
           </tr>
           <tr>
             <td style="padding: 12px; border: 1px solid #e2e8f0; font-weight: bold;">Duration</td>
@@ -459,15 +552,15 @@ const generateAndSendWorkoutReport = async (session, user, dietPlan) => {
           </tr>
           <tr style="background-color: #f8fafc;">
             <td style="padding: 12px; border: 1px solid #e2e8f0; font-weight: bold;">Reps Completed</td>
-            <td style="padding: 12px; border: 1px solid #e2e8f0;">${session.repsCompleted} reps (${session.setsCompleted} sets)</td>
+            <td style="padding: 12px; border: 1px solid #e2e8f0;">${session.repsCompleted || 0} reps (${session.setsCompleted || 1} sets)</td>
           </tr>
           <tr>
             <td style="padding: 12px; border: 1px solid #e2e8f0; font-weight: bold;">Form Accuracy</td>
-            <td style="padding: 12px; border: 1px solid #e2e8f0; font-weight: bold; color: ${session.accuracyScore >= 80 ? '#16a34a' : '#ea580c'};">${session.accuracyScore}%</td>
+            <td style="padding: 12px; border: 1px solid #e2e8f0; font-weight: bold; color: ${(session.accuracyScore || 90) >= 80 ? '#16a34a' : '#ea580c'};">${session.accuracyScore || 90}%</td>
           </tr>
           <tr style="background-color: #f8fafc;">
             <td style="padding: 12px; border: 1px solid #e2e8f0; font-weight: bold;">Calories Burned</td>
-            <td style="padding: 12px; border: 1px solid #e2e8f0;">${session.caloriesBurned} kcal</td>
+            <td style="padding: 12px; border: 1px solid #e2e8f0; font-weight: bold; color: #ea580c;">${session.caloriesBurned || 0} kcal</td>
           </tr>
           <tr>
             <td style="padding: 12px; border: 1px solid #e2e8f0; font-weight: bold;">Glycemic Impact Score</td>
@@ -492,7 +585,7 @@ const generateAndSendWorkoutReport = async (session, user, dietPlan) => {
 
     await sendEmail({
       to: user.email,
-      subject: `🏋️ Workout Complete Report & AI Diet Plan: ${exercise?.name || 'Session'}`,
+      subject: `🏋️ Workout Complete Report & AI Diet Plan: ${finalExName}`,
       html,
       attachments: [
         {

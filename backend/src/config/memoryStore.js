@@ -133,6 +133,145 @@ const exercises = [
     precautions: ['Wear supportive athletic shoes', 'Hold onto a wall or sturdy chair if you experience balance issues'],
     landmarks: { primaryJoints: ['left_hip', 'right_hip', 'left_knee', 'right_knee'], angleThresholds: { minAngle: 100, maxAngle: 165 } },
     thumbnail: '/images/exercises/walking-place.png'
+  },
+  {
+    _id: 'ex_9',
+    name: 'Arm Circle',
+    slug: 'arm-circle',
+    description: 'Circular arm movements for shoulder flexibility and upper back posture',
+    category: 'flexibility',
+    difficulty: 'beginner',
+    targetReps: 10,
+    targetSets: 2,
+    caloriesPerMinute: 3,
+    isDiabetesRecommended: true,
+    instructions: ['Extend arms to sides', 'Make small circles forward', 'Gradually increase circle size', 'Reverse direction'],
+    precautions: ['Shoulder pain - reduce range'],
+    landmarks: { primaryJoints: ['left_shoulder', 'right_shoulder'], angleThresholds: { minAngle: 0, maxAngle: 360 } },
+    thumbnail: '/images/exercises/arm-circle.png'
+  },
+  {
+    _id: 'ex_10',
+    name: 'Standing Knee Bend',
+    slug: 'standing-knee-bend',
+    description: 'Standing hamstring curls for lower body mobility and glycemic control',
+    category: 'lower_body',
+    difficulty: 'beginner',
+    targetReps: 12,
+    targetSets: 3,
+    caloriesPerMinute: 4,
+    isDiabetesRecommended: true,
+    instructions: ['Stand holding onto support', 'Bend one knee bringing heel to buttock', 'Lower slowly and alternate'],
+    precautions: ['Use support for balance'],
+    landmarks: { primaryJoints: ['left_knee', 'right_knee'], angleThresholds: { minAngle: 30, maxAngle: 150 } },
+    thumbnail: '/images/exercises/standing-knee-bend.png'
+  },
+  {
+    _id: 'ex_11',
+    name: 'Ankle Pump',
+    slug: 'ankle-pump',
+    description: 'Ankle flexion exercises for peripheral circulation and diabetic neuropathy relief',
+    category: 'flexibility',
+    difficulty: 'beginner',
+    targetReps: 20,
+    targetSets: 3,
+    caloriesPerMinute: 2,
+    isDiabetesRecommended: true,
+    instructions: ['Sit or lie down', 'Point toes away from body', 'Pull toes toward body', 'Repeat rhythmically'],
+    precautions: ['None - safe for all'],
+    landmarks: { primaryJoints: ['left_ankle', 'right_ankle'], angleThresholds: { minAngle: 0, maxAngle: 50 } },
+    thumbnail: '/images/exercises/ankle-pump.png'
+  },
+  {
+    _id: 'ex_12',
+    name: 'Seated Spinal Twist',
+    slug: 'seated-twist',
+    description: 'Gentle seated twist to improve spinal mobility, digestion, and posture for diabetic patients.',
+    category: 'flexibility',
+    difficulty: 'beginner',
+    targetReps: 10,
+    targetSets: 3,
+    caloriesPerMinute: 2,
+    isDiabetesRecommended: true,
+    instructions: [
+      'Sit tall on a stable chair with feet flat on the floor.',
+      'Place your right hand on your left outer thigh and left hand behind you.',
+      'Inhale to lengthen your spine, exhale to twist gently to the left.',
+      'Hold for a deep breath, return to center, and repeat on the other side.'
+    ],
+    precautions: [
+      'Do not force the twist if you feel any strain.',
+      'Keep spine tall and avoid slouching.'
+    ],
+    landmarks: {
+      primaryJoints: ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'],
+      angleThresholds: { minAngle: 60, maxAngle: 90 }
+    },
+    thumbnail: '/images/exercises/seated-twist.png'
+  },
+  {
+    _id: 'ex_13',
+    name: 'Prenatal Yoga',
+    slug: 'prenatal-yoga',
+    description: 'Gentle restorative yoga postures to maintain pelvic mobility, reduce stress, and improve breathing.',
+    category: 'flexibility',
+    difficulty: 'beginner',
+    targetReps: 10,
+    targetSets: 2,
+    caloriesPerMinute: 3,
+    isDiabetesRecommended: true,
+    instructions: ['Begin in a comfortable seated position', 'Perform gentle side reaches and cat-cow breathing', 'Hold each stretch for 3 deep breaths'],
+    precautions: ['Do not overstretch', 'Avoid lying flat on back after first trimester'],
+    landmarks: { primaryJoints: ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'], angleThresholds: { minAngle: 30, maxAngle: 150 } },
+    thumbnail: '/images/exercises/prenatal-yoga.png'
+  },
+  {
+    _id: 'ex_14',
+    name: 'Kegel Pelvic Floor Exercises',
+    slug: 'kegels',
+    description: 'Targeted pelvic floor muscle contractions to strengthen pelvic support and circulation during pregnancy.',
+    category: 'core',
+    difficulty: 'beginner',
+    targetReps: 15,
+    targetSets: 3,
+    caloriesPerMinute: 2,
+    isDiabetesRecommended: true,
+    instructions: ['Contract pelvic floor muscles', 'Hold for 5 seconds', 'Release gently for 5 seconds', 'Repeat rhythmically'],
+    precautions: ['Do not hold your breath while contracting', 'Relax completely between contractions'],
+    landmarks: { primaryJoints: ['left_hip', 'right_hip'], angleThresholds: { minAngle: 0, maxAngle: 90 } },
+    thumbnail: '/images/exercises/kegels.png'
+  },
+  {
+    _id: 'ex_15',
+    name: 'Gentle Stretching',
+    slug: 'gentle-stretching',
+    description: 'Safe, low-intensity stretching for back, hips, and calves to alleviate muscle cramps and joint tightness.',
+    category: 'flexibility',
+    difficulty: 'beginner',
+    targetReps: 10,
+    targetSets: 2,
+    caloriesPerMinute: 2,
+    isDiabetesRecommended: true,
+    instructions: ['Extend arms forward slowly', 'Gently reach toward sides within comfort', 'Hold stretches for 10-15 seconds'],
+    precautions: ['Stop immediately if you feel sharp pain or dizziness'],
+    landmarks: { primaryJoints: ['left_shoulder', 'right_shoulder', 'left_hip', 'right_hip'], angleThresholds: { minAngle: 30, maxAngle: 120 } },
+    thumbnail: '/images/exercises/gentle-stretching.png'
+  },
+  {
+    _id: 'ex_16',
+    name: 'Stationary Cycling',
+    slug: 'stationary-cycling',
+    description: 'Low-impact cardiovascular exercise on a stationary bike to lower blood glucose safely.',
+    category: 'cardio',
+    difficulty: 'beginner',
+    targetReps: 20,
+    targetSets: 3,
+    caloriesPerMinute: 6,
+    isDiabetesRecommended: true,
+    instructions: ['Adjust seat to hip height', 'Pedal at a smooth, moderate pace', 'Keep handlebars comfortably within reach'],
+    precautions: ['Stay well hydrated', 'Do not exceed moderate exertion level'],
+    landmarks: { primaryJoints: ['left_hip', 'left_knee', 'right_hip', 'right_knee'], angleThresholds: { minAngle: 60, maxAngle: 150 } },
+    thumbnail: '/images/exercises/stationary-cycling.png'
   }
 ];
 
@@ -268,53 +407,53 @@ function makeQueryPromise(result) {
   return obj;
 }
 
+const defaultAccounts = [
+  {
+    firstName: 'Demo',
+    lastName: 'Patient',
+    email: 'demo@diafit.com',
+    password: 'password123',
+    role: 'patient',
+    phone: '+1234567890',
+    profile: {
+      gender: 'male',
+      height: 175,
+      weight: 70,
+      profession: 'Engineer',
+      emergencyContact: {
+        name: 'Emergency Guardian',
+        phone: '+1234567890',
+        email: 'emergency@diafit.com',
+        relationship: 'Family'
+      }
+    },
+    patientInfo: { diabetesType: 'type2' }
+  },
+  {
+    firstName: 'Ashoka',
+    lastName: 'User',
+    email: (process.env.SMTP_USER || 'a09022762@gmail.com').toLowerCase().trim(),
+    password: 'password123',
+    role: 'patient',
+    phone: '+919876543210',
+    profile: {
+      gender: 'male',
+      height: 175,
+      weight: 70,
+      profession: 'Member',
+      emergencyContact: {
+        name: 'Primary Contact',
+        phone: '+919876543210',
+        email: (process.env.SMTP_USER || 'a09022762@gmail.com').toLowerCase().trim(),
+        relationship: 'Self/Family'
+      }
+    },
+    patientInfo: { diabetesType: 'type2' }
+  }
+];
+
 // Seed initial users
 function seedInitialUsers() {
-  const defaultAccounts = [
-    {
-      firstName: 'Demo',
-      lastName: 'Patient',
-      email: 'demo@diafit.com',
-      password: 'password123',
-      role: 'patient',
-      phone: '+1234567890',
-      profile: {
-        gender: 'male',
-        height: 175,
-        weight: 70,
-        profession: 'Engineer',
-        emergencyContact: {
-          name: 'Emergency Guardian',
-          phone: '+1234567890',
-          email: 'emergency@diafit.com',
-          relationship: 'Family'
-        }
-      },
-      patientInfo: { diabetesType: 'type2' }
-    },
-    {
-      firstName: 'Ashoka',
-      lastName: 'User',
-      email: (process.env.SMTP_USER || 'a09022762@gmail.com').toLowerCase().trim(),
-      password: 'password123',
-      role: 'patient',
-      phone: '+919876543210',
-      profile: {
-        gender: 'male',
-        height: 175,
-        weight: 70,
-        profession: 'Member',
-        emergencyContact: {
-          name: 'Primary Contact',
-          phone: '+919876543210',
-          email: (process.env.SMTP_USER || 'a09022762@gmail.com').toLowerCase().trim(),
-          relationship: 'Self/Family'
-        }
-      },
-      patientInfo: { diabetesType: 'type2' }
-    }
-  ];
-
   for (const acc of defaultAccounts) {
     if (!users.some(u => u.email === acc.email)) {
       const salt = bcrypt.genSaltSync(10);
@@ -730,6 +869,7 @@ module.exports = {
   users,
   otps,
   exercises,
+  defaultAccounts,
   alerts,
   healthRecords,
   exerciseSessions,

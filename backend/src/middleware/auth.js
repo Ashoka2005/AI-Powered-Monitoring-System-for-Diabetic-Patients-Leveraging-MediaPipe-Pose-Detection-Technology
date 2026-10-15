@@ -33,4 +33,25 @@ const protect = async (req, res, next) => {
   }
 };
 
-module.exports = { protect };
+const optionalAuth = async (req, res, next) => {
+  try {
+    let token;
+    if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
+      token = req.headers.authorization.split(' ')[1];
+    } else if (req.cookies?.token) {
+      token = req.cookies.token;
+    }
+
+    if (token) {
+      const jwtSecret = process.env.JWT_SECRET || 'diafit-ai-dev-secret-key-2024-change-in-production';
+      const decoded = jwt.verify(token, jwtSecret);
+      req.user = await User.findById(decoded.id).select('-password');
+    }
+  } catch (error) {
+    req.user = null;
+  }
+  next();
+};
+
+module.exports = { protect, optionalAuth };
+

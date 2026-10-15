@@ -963,27 +963,60 @@ export default function ExerciseRoom() {
 
     // End session in backend and load pre-generated diet plan
     setLoadingDiet(true);
-    if (sessionId) {
-      try {
-        const res = await api.put(`/exercises/session/${sessionId}/end`, {
-          repsCompleted: finalReps,
-          setsCompleted: summaryData.sets,
-          accuracyScore: finalAccuracy,
-          caloriesBurned: finalCalories,
-          fallDetected,
-          postureCorrections: correctionsCount,
-          feedback: sessionFeedbackHistory.map(msg => ({ timestamp: new Date(), message: msg, severity: 'warning' }))
-        });
+    const activeSessionId = sessionId || ('ses_' + Date.now());
+    try {
+      const res = await api.put(`/exercises/session/${activeSessionId}/end`, {
+        exerciseId: selectedExercise?._id,
+        exerciseName: selectedExercise?.name,
+        duration: finalDuration,
+        repsCompleted: finalReps,
+        setsCompleted: summaryData.sets,
+        accuracyScore: finalAccuracy,
+        caloriesBurned: finalCalories,
+        fallDetected,
+        postureCorrections: correctionsCount,
+        feedback: sessionFeedbackHistory.map(msg => ({ timestamp: new Date(), message: msg, severity: 'warning' }))
+      });
 
-        if (res.data?.dietPlan) {
-          setDietPlan(res.data.dietPlan);
-        }
-      } catch (err) {
-        console.error('Failed to save session', err);
-      } finally {
-        setLoadingDiet(false);
+      if (res.data?.dietPlan) {
+        setDietPlan(res.data.dietPlan);
       }
-    } else {
+    } catch (err) {
+      console.error('Failed to save session, applying local fallback diet recommendation', err);
+      // Fallback diet recommendation in case of offline/network issues
+      setDietPlan({
+        title: `Diabetic Recovery Nutrition (${selectedExercise?.name || 'Workout'})`,
+        totalCalories: 1750,
+        totalCarbs: 160,
+        totalProtein: 95,
+        totalFat: 55,
+        meals: [
+          {
+            name: 'Post-Workout Recovery Snack',
+            time: 'Within 45m',
+            calories: 180,
+            items: [
+              { name: 'Unsweetened Greek yogurt with chia seeds', quantity: '150g' },
+              { name: 'Fresh blueberries', quantity: '1/4 cup' }
+            ]
+          },
+          {
+            name: 'Diabetic Balanced Meal',
+            time: 'Main Meal',
+            calories: 520,
+            items: [
+              { name: 'Grilled lean protein (chicken/tofu/paneer)', quantity: '140g' },
+              { name: 'Quinoa or brown rice with leafy salad', quantity: '1 bowl' }
+            ]
+          }
+        ],
+        restrictions: ['Avoid sugary beverages and juices', 'Limit refined carbohydrates'],
+        recommendations: [
+          `Consume post-workout recovery snack within 45 minutes of ${selectedExercise?.name || 'exercise'}`,
+          'Stay hydrated with at least 2.5L water daily'
+        ]
+      });
+    } finally {
       setLoadingDiet(false);
     }
 
